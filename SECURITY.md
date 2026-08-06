@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report security issues **privately** through GitHub's
-[private vulnerability reporting](https://github.com/<OWNER>/AntiGoogle/security/advisories/new)
+[private vulnerability reporting](https://github.com/sYYn/AntiGoogle/security/advisories/new)
 rather than opening a public issue.
 
 Include the version, your Windows build, what you expected, what happened, and — if the bug touches

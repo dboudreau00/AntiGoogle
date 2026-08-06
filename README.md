@@ -6,8 +6,8 @@
 
 **Strips Google telemetry out of Windows — and tells you, in plain language, exactly what that costs you before it does anything.**
 
-[![CI](https://github.com/<OWNER>/AntiGoogle/actions/workflows/ci.yml/badge.svg)](https://github.com/<OWNER>/AntiGoogle/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/<OWNER>/AntiGoogle?include_prereleases)](https://github.com/<OWNER>/AntiGoogle/releases)
+[![CI](https://github.com/sYYn/AntiGoogle/actions/workflows/ci.yml/badge.svg)](https://github.com/sYYn/AntiGoogle/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/sYYn/AntiGoogle?include_prereleases)](https://github.com/sYYn/AntiGoogle/releases)
 [![Licence: GPL v3](https://img.shields.io/badge/licence-GPLv3-blue.svg)](LICENSE)
 [![.NET 9](https://img.shields.io/badge/.NET-9.0-512BD4)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4)](#)
@@ -47,7 +47,7 @@ That is a real entry from the catalog. All 23 rules read like that.
 
 ## Install
 
-Grab the latest build from [**Releases**](https://github.com/<OWNER>/AntiGoogle/releases). It is a
+Grab the latest build from [**Releases**](https://github.com/sYYn/AntiGoogle/releases). It is a
 single self-contained `.exe` — no .NET runtime needed, no installer, nothing written outside
 `%ProgramData%\AntiGoogle`.
 
