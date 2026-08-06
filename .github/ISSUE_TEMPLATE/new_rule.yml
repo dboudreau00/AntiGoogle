@@ -1,0 +1,71 @@
+name: Propose a rule
+description: A Google endpoint, service or policy that should be blockable
+labels: [rule]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A rule is only accepted with an honest account of what it breaks. That is not bureaucracy —
+        it is the whole product. A rule without a breakage list is a rule that lies to the user.
+
+  - type: input
+    id: title
+    attributes:
+      label: What should it block
+      placeholder: "Chrome's optimization-hint fetching"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Which layer
+      options:
+        - Hosts file (domain sinkhole)
+        - Windows Firewall (IP range or program)
+        - Service or scheduled task
+        - Chrome/Edge registry policy
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: payload
+    attributes:
+      label: The specific targets
+      description: |
+        Exact domains, CIDR ranges, service names or policy values. Remember hosts entries have no
+        wildcards — `googleapis.com` does not cover `fcm.googleapis.com`, so subdomains must be
+        listed individually.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: breaks
+    attributes:
+      label: What does blocking this break?
+      description: |
+        Required. Name the user-visible capability, not the mechanism. Say what someone will
+        actually observe, including if the failure is silent. Flag security losses as loudly as
+        convenience ones. "Nothing, as far as I can tell" is an acceptable answer if you have
+        actually looked.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Worst severity of that breakage
+      options:
+        - "Minor — cosmetic or rarely noticed, a fallback exists"
+        - "Notable — a feature visibly stops working, the app still runs"
+        - "Severe — something people rely on fails outright, possibly locking them out"
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: How do you know
+      description: Packet capture, DevTools, documentation, or simply "I blocked it and this is what happened".

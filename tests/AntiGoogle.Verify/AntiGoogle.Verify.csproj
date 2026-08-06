@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Console test runner.
+
+    Why this exists: Smart App Control / WDAC, when enforced, blocks Microsoft-signed testhost.exe
+    from loading unsigned test assemblies (0x800711C7), so `dotnet test` cannot run on such a
+    machine. An unsigned console exe loading its own unsigned dependencies is allowed, so this
+    runs the very same [Fact]/[Theory] methods via reflection.
+
+    It LINKS the test sources rather than copying them — there is exactly one copy of every
+    assertion, shared with the xunit project, which remains the canonical suite for CI.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>AntiGoogle.Verify</RootNamespace>
+    <AssemblyName>AntiGoogle.Verify</AssemblyName>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- Referencing xunit makes `dotnet test <solution>` try to run this as a test project, which
+         fails because it is a console exe with no test host. It is a RUNNER, not a suite. -->
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Assertions only; no runner, no adapter. -->
+    <PackageReference Include="xunit" Version="2.9.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AntiGoogle.Core\AntiGoogle.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\AntiGoogle.Core.Tests\**\*.cs" Exclude="..\AntiGoogle.Core.Tests\obj\**;..\AntiGoogle.Core.Tests\bin\**" />
+  </ItemGroup>
+
+</Project>

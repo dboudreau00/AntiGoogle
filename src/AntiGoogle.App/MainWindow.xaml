@@ -1,0 +1,985 @@
+<Window x:Class="AntiGoogle.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:AntiGoogle.App.ViewModels"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="Anti-Google" Height="820" Width="1180" MinHeight="640" MinWidth="960"
+        Background="{StaticResource Bg}"
+        Icon="Assets/AntiGoogle.ico"
+        Foreground="{StaticResource Text}"
+        FontSize="{StaticResource FontBase}"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResize"
+        UseLayoutRounding="True" TextOptions.TextRenderingMode="ClearType">
+
+    <!-- WindowStyle is deliberately NOT set. Leaving it at the default SingleBorderWindow keeps
+         the real window styles, which is what gives us drag, double-click-to-maximise, Aero Snap,
+         the Alt+Space system menu, the native drop shadow and Windows 11 rounded corners for
+         free. WindowStyle="None" is the legacy recipe and forfeits all of it. -->
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="40"
+                            ResizeBorderThickness="6"
+                            CornerRadius="0"
+                            GlassFrameThickness="0,0,0,1"
+                            NonClientFrameEdges="None"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+
+    <Window.InputBindings>
+        <KeyBinding Key="Escape" Command="{Binding DismissOverlayCommand}" />
+    </Window.InputBindings>
+
+    <Window.Resources>
+
+        <!-- One degradation line. Severity is stated as a WORD as well as a colour: colour alone
+             is invisible to a screen reader and to a colour-blind user, and this list is the
+             product's entire reason for existing. The label/text split is a Grid, not a
+             horizontal StackPanel — TextWrapping is inert inside one (infinite width), which was
+             silently clipping the longest and most important warnings. -->
+        <DataTemplate x:Key="DegradationTemplate" DataType="{x:Type vm:DegradationRow}">
+            <Border Style="{StaticResource Row}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Width="4" CornerRadius="{StaticResource RadiusXs}" Margin="0,2,13,2"
+                            Background="{Binding Severity, Converter={StaticResource SevBrush}}" />
+
+                    <StackPanel Grid.Column="1">
+                        <Grid Margin="0,0,0,3">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding SeverityLabel}"
+                                       FontSize="{StaticResource FontChip}" FontWeight="Bold" VerticalAlignment="Top"
+                                       Margin="0,2,10,0"
+                                       Foreground="{Binding Severity, Converter={StaticResource SevBrush}}" />
+                            <TextBlock Grid.Column="1" Text="{Binding What}" FontWeight="SemiBold"
+                                       TextWrapping="Wrap" />
+                        </Grid>
+                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Muted}" />
+                        <TextBlock Text="{Binding CausedBy}" Style="{StaticResource Mono}" Margin="0,5,0,0" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- Empty-state card. Three screens previously rendered as a header floating above
+             nothing, which reads as a broken app rather than an empty one. -->
+        <Style x:Key="EmptyState" TargetType="Border" BasedOn="{StaticResource Card}">
+            <Setter Property="Padding" Value="28" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrushSoft}" />
+        </Style>
+
+    </Window.Resources>
+
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />   <!-- title bar -->
+            <RowDefinition Height="*" />      <!-- rail + content -->
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="228" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- ============================ TITLE BAR ============================
+             Spans both columns so the shell reads as one surface rather than a strip bolted
+             above a rail. The middle column is intentionally empty: it is the drag handle.
+             WindowChrome.CaptionHeight makes the whole strip HTCAPTION, so dragging and
+             double-click-to-maximise are native behaviour, not hand-rolled DragMove(). -->
+        <Border x:Name="TitleBar" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+                Height="{StaticResource TitleBarHeight}"
+                Background="{StaticResource Surface}"
+                BorderBrush="{StaticResource BorderBrushSoft}" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal"
+                            Margin="15,0,0,0" VerticalAlignment="Center">
+                    <!-- Bleed variant per Logo.xaml: the slab runs off the top and bottom, which is what
+                         separates the mark from the media "skip to end" glyph at small sizes. -->
+                    <Path Data="{StaticResource LogoGeometryBleed}"
+                          Fill="{StaticResource Accent}"
+                          Stretch="Uniform" Width="16" Height="16"
+                          VerticalAlignment="Center" />
+                    <TextBlock Text="Anti-Google" FontSize="{StaticResource FontSm}" FontWeight="SemiBold"
+                               Foreground="{StaticResource Text}"
+                               Margin="10,0,0,1" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- Column 1 left empty on purpose — this is the drag region. -->
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
+                    <Button x:Name="MinimizeButton" Style="{StaticResource CaptionButton}"
+                            Content="&#xE921;" ToolTip="Minimize"
+                            AutomationProperties.Name="Minimize"
+                            Click="MinimizeButton_Click" />
+                    <!-- Content comes from CaptionMaximizeButton's Style, never inline: a locally
+                         set Content outranks a Style trigger and would freeze the glyph. -->
+                    <Button x:Name="MaximizeButton" Style="{StaticResource CaptionMaximizeButton}"
+                            Click="MaximizeButton_Click" />
+                    <Button x:Name="CloseButton" Style="{StaticResource CaptionCloseButton}"
+                            Content="&#xE8BB;" ToolTip="Close"
+                            AutomationProperties.Name="Close"
+                            Click="CloseButton_Click" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ============================ NAV RAIL ============================ -->
+        <Border x:Name="NavRail" Grid.Row="1" Grid.Column="0" Background="{StaticResource Surface}"
+                BorderBrush="{StaticResource BorderBrushSoft}" BorderThickness="0,0,1,0"
+                IsEnabled="{Binding IsOverlayOpen, Converter={StaticResource Not}}">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Margin="20,20,20,14">
+                    <TextBlock Text="DE-GOOGLE WINDOWS" Style="{StaticResource EyebrowFaint}" />
+                </StackPanel>
+
+                <!-- Elevation banner -->
+                <Border DockPanel.Dock="Bottom" Margin="14,10,14,16" CornerRadius="{StaticResource RadiusMd}"
+                        Padding="12" Background="#22FF4D4F"
+                        BorderBrush="{StaticResource SevSevere}" BorderThickness="1"
+                        Visibility="{Binding IsElevated, Converter={StaticResource NotBoolVis}}">
+                    <StackPanel>
+                        <TextBlock Text="Not running as administrator" FontWeight="SemiBold"
+                                   FontSize="{StaticResource FontSm}"
+                                   Foreground="{StaticResource SevSevere}" TextWrapping="Wrap" />
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,5,0,9" FontSize="{StaticResource FontXs}"
+                                   Text="You can browse and preview everything. Applying and restoring need admin." />
+                        <Button Content="Restart as Administrator" Style="{StaticResource GhostButton}"
+                                Command="{Binding ElevateCommand}" HorizontalAlignment="Stretch" />
+                    </StackPanel>
+                </Border>
+
+                <Border DockPanel.Dock="Bottom" Margin="14,0,14,10" CornerRadius="{StaticResource RadiusMd}"
+                        Padding="12" Background="{StaticResource Surface2}"
+                        Visibility="{Binding IsElevated, Converter={StaticResource BoolVis}}">
+                    <StackPanel>
+                        <TextBlock Text="Administrator" FontWeight="SemiBold" FontSize="{StaticResource FontSm}"
+                                   Foreground="{StaticResource SevNone}" />
+                        <TextBlock Style="{StaticResource Muted}" FontSize="{StaticResource FontXs}" Margin="0,3,0,0"
+                                   Text="Apply and Restore are available." />
+                    </StackPanel>
+                </Border>
+
+                <ListBox Style="{StaticResource NavList}" ItemContainerStyle="{StaticResource NavItem}"
+                         SelectedIndex="{Binding SelectedPage, Mode=TwoWay}">
+                    <ListBoxItem Content="Dashboard" />
+                    <ListBoxItem Content="Rules" />
+                    <ListBoxItem Content="Impact report" />
+                    <ListBoxItem Content="App containment" />
+                    <ListBoxItem Content="History &amp; restore" />
+                    <ListBoxItem Content="About" />
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <!-- ============================ CONTENT ============================ -->
+        <Grid x:Name="ContentArea" Grid.Row="1" Grid.Column="1"
+              IsEnabled="{Binding IsOverlayOpen, Converter={StaticResource Not}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />   <!-- result banner, visible on every page -->
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0">
+
+                <!-- ============ 0 · DASHBOARD ============ -->
+                <ScrollViewer Style="{StaticResource PageScroller}" Padding="{StaticResource PagePadding}"
+                              AutomationProperties.Name="Dashboard"
+                              Visibility="{Binding SelectedPage, Converter={StaticResource IdxVis}, ConverterParameter=0}">
+                    <StackPanel MaxWidth="880" HorizontalAlignment="Left">
+
+                        <TextBlock Text="Dashboard" Style="{StaticResource H1}" />
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,22"
+                                   Text="Anti-Google removes Google telemetry from this Windows machine using the hosts file, Windows Firewall, service and scheduled-task control, and browser policy. Every change is journalled and reversible." />
+
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,18"
+                                Background="#22FF4D4F" BorderBrush="{StaticResource SevSevere}"
+                                Visibility="{Binding HasInitError, Converter={StaticResource BoolVis}}">
+                            <StackPanel>
+                                <TextBlock Text="Anti-Google could not read its change journal"
+                                           FontWeight="SemiBold" Foreground="{StaticResource SevSevere}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding InitError}" Style="{StaticResource Muted}" Margin="0,6,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Status -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="{Binding StatusHeadline}" Style="{StaticResource H1}"
+                                           FontSize="{StaticResource FontXl}" />
+                                <TextBlock Text="{Binding StatusDetail}" Style="{StaticResource Muted}"
+                                           Margin="0,6,0,18" />
+
+                                <!-- Explicit equal columns rather than UniformGrid + per-item Margin:
+                                     the old version had an uneven final gutter and clipped
+                                     "DOMAINS SINKHOLED" at the window's minimum width. -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="{Binding SinkholedDomains}" FontSize="{StaticResource Font2Xl}" FontWeight="SemiBold" />
+                                        <TextBlock Text="DOMAINS" Style="{StaticResource EyebrowFaint}" />
+                                        <TextBlock Text="SINKHOLED" Style="{StaticResource EyebrowFaint}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="{Binding FirewallRules}" FontSize="{StaticResource Font2Xl}" FontWeight="SemiBold" />
+                                        <TextBlock Text="FIREWALL" Style="{StaticResource EyebrowFaint}" />
+                                        <TextBlock Text="RULES" Style="{StaticResource EyebrowFaint}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="{Binding DisabledServices}" FontSize="{StaticResource Font2Xl}" FontWeight="SemiBold" />
+                                        <TextBlock Text="SERVICES" Style="{StaticResource EyebrowFaint}" />
+                                        <TextBlock Text="OFF" Style="{StaticResource EyebrowFaint}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="3">
+                                        <TextBlock Text="{Binding RegistryValues}" FontSize="{StaticResource Font2Xl}" FontWeight="SemiBold" />
+                                        <TextBlock Text="POLICY" Style="{StaticResource EyebrowFaint}" />
+                                        <TextBlock Text="VALUES" Style="{StaticResource EyebrowFaint}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="4">
+                                        <TextBlock Text="{Binding JournalCount}" FontSize="{StaticResource Font2Xl}" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource SevNone}" />
+                                        <TextBlock Text="REVERSIBLE" Style="{StaticResource EyebrowFaint}" />
+                                        <TextBlock Text="CHANGES" Style="{StaticResource EyebrowFaint}" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Armed summary -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="What is armed right now" Style="{StaticResource H2}" />
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,16">
+                                    <Run Text="{Binding EnabledRuleCount, Mode=OneWay}" />
+                                    <Run Text="rules selected. If you apply them, this is what stops working:" />
+                                </TextBlock>
+
+                                <Grid Margin="0,0,0,18">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="{Binding SevereCount}" FontSize="{StaticResource FontXl}" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource SevSevere}" />
+                                        <TextBlock Text="SEVERE" Style="{StaticResource EyebrowFaint}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="{Binding NotableCount}" FontSize="{StaticResource FontXl}" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource SevNotable}" />
+                                        <TextBlock Text="NOTABLE" Style="{StaticResource EyebrowFaint}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="{Binding MinorCount}" FontSize="{StaticResource FontXl}" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource SevMinor}" />
+                                        <TextBlock Text="MINOR" Style="{StaticResource EyebrowFaint}" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock Text="PROFILE" Style="{StaticResource Eyebrow}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding ProfileLabel}" Style="{StaticResource Mono}"
+                                               Foreground="{StaticResource Accent}" Margin="10,0,0,0"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Conservative" Margin="0,0,8,0"
+                                            AutomationProperties.Name="{Binding ConservativeAutomationName}"
+                                            Command="{Binding ApplyProfileCommand}" CommandParameter="Conservative">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsConservativeActive}" Value="True">
+                                                        <Setter Property="Background" Value="{StaticResource Surface3}" />
+                                                        <Setter Property="Foreground" Value="{StaticResource Text}" />
+                                                        <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+                                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                    <Button Content="Balanced" Margin="0,0,8,0"
+                                            AutomationProperties.Name="{Binding BalancedAutomationName}"
+                                            Command="{Binding ApplyProfileCommand}" CommandParameter="Balanced">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsBalancedActive}" Value="True">
+                                                        <Setter Property="Background" Value="{StaticResource Surface3}" />
+                                                        <Setter Property="Foreground" Value="{StaticResource Text}" />
+                                                        <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+                                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                    <Button Content="Aggressive"
+                                            AutomationProperties.Name="{Binding AggressiveAutomationName}"
+                                            Command="{Binding ApplyProfileCommand}" CommandParameter="Aggressive">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsAggressiveActive}" Value="True">
+                                                        <Setter Property="Background" Value="{StaticResource Surface3}" />
+                                                        <Setter Property="Foreground" Value="{StaticResource Text}" />
+                                                        <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+                                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Preview changes" Style="{StaticResource BaseButton}" Margin="0,0,10,0"
+                                    Command="{Binding PreviewCommand}" />
+                            <Button Content="Apply protection" Style="{StaticResource DangerButton}" Margin="0,0,10,0"
+                                    Command="{Binding ApplyCommand}"
+                                    ToolTip="Needs administrator rights"
+                                    AutomationProperties.HelpText="Needs administrator rights. Press to see how to elevate." />
+                            <Button Content="Restore everything" Style="{StaticResource BaseButton}" Margin="0,0,10,0"
+                                    Command="{Binding RestoreEverythingCommand}"
+                                    ToolTip="Needs administrator rights"
+                                    AutomationProperties.HelpText="Needs administrator rights. Press to see how to elevate." />
+                            <Button Content="Refresh" Style="{StaticResource GhostButton}"
+                                    Command="{Binding RefreshStatusCommand}" />
+                        </StackPanel>
+
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- ============ 1 · RULES ============ -->
+                <DockPanel Visibility="{Binding SelectedPage, Converter={StaticResource IdxVis}, ConverterParameter=1}">
+                    <StackPanel DockPanel.Dock="Top" Margin="32,28,32,16">
+                        <TextBlock Text="Rules" Style="{StaticResource H1}" />
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,0"
+                                   Text="Every rule states what it costs you. Rules marked CONSENT can lock you out of accounts or your network, so arming them requires typing a confirmation." />
+                    </StackPanel>
+
+                    <ScrollViewer Style="{StaticResource PageScroller}" AutomationProperties.Name="Rules">
+                        <ItemsControl ItemsSource="{Binding RuleGroups}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,26">
+                                        <TextBlock Text="{Binding Name}" Style="{StaticResource H2}"
+                                                   Foreground="{StaticResource TextMuted}" />
+
+                                        <ItemsControl ItemsSource="{Binding Rules}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource Card}" Padding="16" Margin="0,0,0,9">
+                                                        <StackPanel>
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                                        <Border CornerRadius="{StaticResource RadiusXs}" Padding="5,1" Margin="0,0,7,0"
+                                                                                Background="{StaticResource Surface3}">
+                                                                            <TextBlock Text="{Binding EngineLabel}" FontSize="{StaticResource FontChip}"
+                                                                                       FontWeight="Bold" Foreground="{StaticResource TextMuted}" />
+                                                                        </Border>
+                                                                        <Border CornerRadius="{StaticResource RadiusXs}" Padding="5,1" Margin="0,0,7,0"
+                                                                                Background="{StaticResource Surface3}">
+                                                                            <TextBlock Text="{Binding TierLabel}" FontSize="{StaticResource FontChip}" FontWeight="Bold"
+                                                                                       Foreground="{Binding Tier, Converter={StaticResource TierBrush}}" />
+                                                                        </Border>
+                                                                        <Border CornerRadius="{StaticResource RadiusXs}" Padding="5,1" Background="#44FF4D4F"
+                                                                                Visibility="{Binding NeedsConsent, Converter={StaticResource BoolVis}}">
+                                                                            <TextBlock Text="CONSENT" FontSize="{StaticResource FontChip}" FontWeight="Bold"
+                                                                                       Foreground="#FF8B8D" />
+                                                                        </Border>
+                                                                    </StackPanel>
+
+                                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
+                                                                               FontSize="{StaticResource FontMd}" TextWrapping="Wrap" />
+                                                                    <TextBlock Text="{Binding Summary}" Style="{StaticResource Muted}"
+                                                                               Margin="0,4,0,0" />
+
+                                                                    <!-- WrapPanel, not StackPanel: this row is the rule's cost
+                                                                         summary and must survive a narrow window. -->
+                                                                    <WrapPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                                                        <TextBlock Text="{Binding TargetSummary}" Style="{StaticResource Mono}"
+                                                                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+                                                                        <Border CornerRadius="{StaticResource RadiusXs}" Padding="6,2" Margin="0,0,10,0"
+                                                                                Background="{StaticResource Surface2}"
+                                                                                Visibility="{Binding HasBreaks, Converter={StaticResource BoolVis}}">
+                                                                            <TextBlock Text="{Binding BreakSummary}" FontSize="{StaticResource FontSm}"
+                                                                                       FontWeight="SemiBold"
+                                                                                       Foreground="{Binding WorstBreakage, Converter={StaticResource SevBrush}}" />
+                                                                        </Border>
+                                                                        <ToggleButton Style="{StaticResource LinkToggle}"
+                                                                                      IsChecked="{Binding IsExpanded, Mode=TwoWay}"
+                                                                                      AutomationProperties.Name="{Binding DetailToggleAutomationName}"
+                                                                                      VerticalAlignment="Center"
+                                                                                      Visibility="{Binding HasBreaks, Converter={StaticResource BoolVis}}" />
+                                                                    </WrapPanel>
+                                                                </StackPanel>
+
+                                                                <CheckBox Grid.Column="1" VerticalAlignment="Top"
+                                                                          IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                                                                          AutomationProperties.Name="{Binding ToggleAutomationName}" />
+                                                            </Grid>
+
+                                                            <!-- Expanded detail -->
+                                                            <StackPanel Margin="0,14,0,0"
+                                                                        Visibility="{Binding IsExpanded, Converter={StaticResource BoolVis}}">
+
+                                                                <Border Background="{StaticResource Surface2}"
+                                                                        CornerRadius="{StaticResource RadiusMd}" Padding="12" Margin="0,0,0,9"
+                                                                        Visibility="{Binding HasNote, Converter={StaticResource BoolVis}}">
+                                                                    <TextBlock Text="{Binding Note}" Style="{StaticResource Muted}" />
+                                                                </Border>
+
+                                                                <ItemsControl ItemsSource="{Binding Breaks}">
+                                                                    <ItemsControl.ItemTemplate>
+                                                                        <DataTemplate>
+                                                                            <Grid Margin="0,0,0,10">
+                                                                                <Grid.ColumnDefinitions>
+                                                                                    <ColumnDefinition Width="Auto" />
+                                                                                    <ColumnDefinition Width="*" />
+                                                                                </Grid.ColumnDefinitions>
+                                                                                <Border Grid.Column="0" Width="3" CornerRadius="{StaticResource RadiusXs}" Margin="0,2,11,2"
+                                                                                        Background="{Binding Severity, Converter={StaticResource SevBrush}}" />
+                                                                                <StackPanel Grid.Column="1">
+                                                                                    <Grid>
+                                                                                        <Grid.ColumnDefinitions>
+                                                                                            <ColumnDefinition Width="Auto" />
+                                                                                            <ColumnDefinition Width="*" />
+                                                                                        </Grid.ColumnDefinitions>
+                                                                                        <!-- Severity as a word, not just a hue. -->
+                                                                                        <TextBlock Grid.Column="0"
+                                                                                                   Text="{Binding Severity, Converter={StaticResource SevLabel}}"
+                                                                                                   FontSize="{StaticResource FontChip}" FontWeight="Bold"
+                                                                                                   VerticalAlignment="Top" Margin="0,2,9,0"
+                                                                                                   Foreground="{Binding Severity, Converter={StaticResource SevBrush}}" />
+                                                                                        <TextBlock Grid.Column="1" Text="{Binding What}"
+                                                                                                   FontWeight="SemiBold" FontSize="{StaticResource FontSm}"
+                                                                                                   TextWrapping="Wrap" />
+                                                                                    </Grid>
+                                                                                    <TextBlock Text="{Binding Detail}" Style="{StaticResource Muted}"
+                                                                                               Margin="0,3,0,0" />
+                                                                                </StackPanel>
+                                                                            </Grid>
+                                                                        </DataTemplate>
+                                                                    </ItemsControl.ItemTemplate>
+                                                                </ItemsControl>
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+
+                <!-- ============ 2 · IMPACT REPORT ============ -->
+                <DockPanel Visibility="{Binding SelectedPage, Converter={StaticResource IdxVis}, ConverterParameter=2}">
+                    <StackPanel DockPanel.Dock="Top" Margin="32,28,32,16">
+                        <TextBlock Text="Impact report" Style="{StaticResource H1}" />
+
+                        <!-- The verdict. This screen used to open with three equal-weight lists and
+                             no answer, burying the one thing the product exists to tell you. -->
+                        <Border Margin="0,14,0,0" Padding="16,13" CornerRadius="{StaticResource RadiusLg}"
+                                Background="{Binding ImpactVerdictLevel, Converter={StaticResource LevelFill}}"
+                                BorderThickness="1"
+                                BorderBrush="{Binding ImpactVerdictLevel, Converter={StaticResource LevelBrush}}">
+                            <TextBlock Text="{Binding ImpactVerdict}" FontSize="{StaticResource FontMd}"
+                                       FontWeight="SemiBold" TextWrapping="Wrap"
+                                       Foreground="{Binding ImpactVerdictLevel, Converter={StaticResource LevelBrush}}" />
+                        </Border>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                            <Button Content="Preview changes" Style="{StaticResource BaseButton}" Margin="0,0,10,0"
+                                    Command="{Binding PreviewCommand}" />
+                            <Button Content="Apply protection" Style="{StaticResource DangerButton}"
+                                    Command="{Binding ApplyCommand}"
+                                    ToolTip="Needs administrator rights"
+                                    AutomationProperties.HelpText="Needs administrator rights. Press to see how to elevate." />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <ScrollViewer Style="{StaticResource PageScroller}" AutomationProperties.Name="Impact report">
+                        <StackPanel>
+
+                            <Border Style="{StaticResource EmptyState}"
+                                    Visibility="{Binding NothingArmed, Converter={StaticResource BoolVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="No rules are armed" Style="{StaticResource H2}" />
+                                    <TextBlock Style="{StaticResource Muted}"
+                                               Text="Go to Rules and switch on what you want blocked, or pick a profile on the Dashboard. This page then lists everything that would stop working — before you apply anything." />
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Text="SAFETY FINDINGS" Style="{StaticResource Eyebrow}" Margin="0,0,0,10"
+                                       Visibility="{Binding Findings.Count, Converter={StaticResource CountVis}}" />
+                            <ItemsControl ItemsSource="{Binding Findings}" Margin="0,0,0,22">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource Row}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Width="4" CornerRadius="{StaticResource RadiusXs}" Margin="0,2,13,2"
+                                                        Background="{Binding Level, Converter={StaticResource FindBrush}}" />
+                                                <StackPanel Grid.Column="1">
+                                                    <Grid Margin="0,0,0,3">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0"
+                                                                   Text="{Binding Level, Converter={StaticResource FindLabel}}"
+                                                                   FontSize="{StaticResource FontChip}" FontWeight="Bold"
+                                                                   VerticalAlignment="Top" Margin="0,2,10,0"
+                                                                   Foreground="{Binding Level, Converter={StaticResource FindBrush}}" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="SemiBold"
+                                                                   TextWrapping="Wrap" />
+                                                    </Grid>
+                                                    <TextBlock Text="{Binding Detail}" Style="{StaticResource Muted}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Text="PLANNED MACHINE CHANGES" Style="{StaticResource Eyebrow}" Margin="0,0,0,10"
+                                       Visibility="{Binding PlannedChanges.Count, Converter={StaticResource CountVis}}" />
+                            <ItemsControl ItemsSource="{Binding PlannedChanges}" Margin="0,0,0,22">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{StaticResource Surface2}" CornerRadius="{StaticResource RadiusSm}"
+                                                Padding="12,8" Margin="0,0,0,5">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Description}" Style="{StaticResource Mono}"
+                                                           Foreground="{StaticResource Text}" />
+                                                <TextBlock Text="{Binding RefusalReason}" Style="{StaticResource Mono}"
+                                                           Foreground="{StaticResource SevSevere}" Margin="0,3,0,0"
+                                                           Visibility="{Binding RefusalReason, Converter={StaticResource StrVis}}" />
+                                                <TextBlock Text="{Binding Error}" Style="{StaticResource Mono}"
+                                                           Foreground="{StaticResource SevSevere}" Margin="0,3,0,0"
+                                                           Visibility="{Binding Error, Converter={StaticResource StrVis}}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Text="WHAT WILL STOP WORKING" Style="{StaticResource Eyebrow}" Margin="0,0,0,10"
+                                       Visibility="{Binding Degradations.Count, Converter={StaticResource CountVis}}" />
+                            <ItemsControl ItemsSource="{Binding Degradations}"
+                                          ItemTemplate="{StaticResource DegradationTemplate}" />
+
+                            <Border Style="{StaticResource Card}" Padding="14" Margin="0,10,0,0"
+                                    Visibility="{Binding Degradations.Count, Converter={StaticResource CountVis}}">
+                                <TextBlock Style="{StaticResource Muted}"
+                                           Text="This list is the honest cost of what you have armed. Nothing here is hidden behind a &quot;learn more&quot; link, and none of it is applied until you press Apply and confirm." />
+                            </Border>
+
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+
+                <!-- ============ 3 · APP CONTAINMENT ============ -->
+                <DockPanel Visibility="{Binding SelectedPage, Converter={StaticResource IdxVis}, ConverterParameter=3}">
+                    <StackPanel DockPanel.Dock="Top" Margin="32,28,32,16">
+                        <TextBlock Text="App containment" Style="{StaticResource H1}" />
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,0"
+                                   Text="Finds binaries that inherit Google's networking stack — Google's own apps, Chromium-derived browsers, and Electron/CEF apps that embed a whole Chromium and phone home under their vendor's name. Containing one writes a firewall rule scoped to that single executable; the rest of the machine is untouched." />
+                        <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                            <Button Content="Scan this machine" Style="{StaticResource BaseButton}" Margin="0,0,12,0"
+                                    Command="{Binding ScanAppsCommand}" />
+                            <TextBlock Style="{StaticResource Muted}" VerticalAlignment="Center"
+                                       Text="Containment applies with the next Apply." />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <ScrollViewer Style="{StaticResource PageScroller}" AutomationProperties.Name="App containment">
+                        <StackPanel>
+                            <Border Style="{StaticResource EmptyState}"
+                                    Visibility="{Binding HasScanned, Converter={StaticResource NotBoolVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="Nothing scanned yet" Style="{StaticResource H2}" />
+                                    <TextBlock Style="{StaticResource Muted}"
+                                               Text="Press &quot;Scan this machine&quot; to walk Program Files and your local app directories for Chromium-derived binaries. The scan is read-only — it looks at file metadata and at whether Chromium runtime files sit next to each executable. It changes nothing." />
+                                </StackPanel>
+                            </Border>
+
+                            <ItemsControl ItemsSource="{Binding DiscoveredApps}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource Card}" Padding="16" Margin="0,0,0,8">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                        <Border CornerRadius="{StaticResource RadiusXs}" Padding="5,1" Background="{StaticResource Surface3}">
+                                                            <TextBlock Text="{Binding OriginLabel}" FontSize="{StaticResource FontChip}" FontWeight="Bold"
+                                                                       Foreground="{StaticResource Accent}" />
+                                                        </Border>
+                                                        <TextBlock Text="{Binding SizeLabel}" Style="{StaticResource Mono}"
+                                                                   Margin="8,0,0,0" VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                                               FontSize="{StaticResource FontMd}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding Path}" Style="{StaticResource Mono}" Margin="0,4,0,0" />
+                                                    <TextBlock Text="{Binding Evidence}" Style="{StaticResource Muted}" Margin="0,5,0,0" />
+                                                    <TextBlock Text="{Binding Publisher}" Style="{StaticResource Mono}" Margin="0,3,0,0"
+                                                               Foreground="{StaticResource TextFaint}" />
+                                                </StackPanel>
+                                                <CheckBox Grid.Column="1" VerticalAlignment="Top"
+                                                          IsChecked="{Binding IsContained, Mode=TwoWay}"
+                                                          AutomationProperties.Name="{Binding ToggleAutomationName}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+
+                <!-- ============ 4 · HISTORY ============ -->
+                <DockPanel Visibility="{Binding SelectedPage, Converter={StaticResource IdxVis}, ConverterParameter=4}">
+                    <StackPanel DockPanel.Dock="Top" Margin="32,28,32,16">
+                        <TextBlock Text="History &amp; restore" Style="{StaticResource H1}" />
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,0"
+                                   Text="Every change Anti-Google made, newest first. Each entry holds the original state, so restoring puts things back exactly rather than guessing at a default." />
+                        <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                            <Button Content="Restore everything" Style="{StaticResource DangerButton}" Margin="0,0,10,0"
+                                    Command="{Binding RestoreEverythingCommand}"
+                                    ToolTip="Needs administrator rights"
+                                    AutomationProperties.HelpText="Needs administrator rights. Press to see how to elevate." />
+                            <Button Content="Open data folder" Style="{StaticResource GhostButton}" Margin="0,0,10,0"
+                                    Command="{Binding OpenLogsCommand}" />
+                            <Button Content="Open hosts file" Style="{StaticResource GhostButton}"
+                                    Command="{Binding OpenHostsFileCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <ScrollViewer Style="{StaticResource PageScroller}" AutomationProperties.Name="History and restore">
+                        <StackPanel>
+                            <Border Style="{StaticResource EmptyState}"
+                                    Visibility="{Binding CanAssertUnmodified, Converter={StaticResource BoolVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="Nothing has been applied yet" Style="{StaticResource H2}" />
+                                    <TextBlock Style="{StaticResource Muted}"
+                                               Text="This machine is unmodified. Once you apply protection, every individual change lands here with the state it replaced, and &quot;Restore everything&quot; replays them backwards." />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource Card}" Padding="16" Margin="0,0,0,10"
+                                    Visibility="{Binding JournalCount, Converter={StaticResource CountVis}}">
+                                <TextBlock Style="{StaticResource Muted}"
+                                           Text="These entries are what makes Anti-Google reversible. They live in ProgramData, not your user profile, so another administrator can undo these changes even if your account is gone." />
+                            </Border>
+
+                            <ItemsControl ItemsSource="{Binding JournalEntries}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{StaticResource Surface2}" CornerRadius="{StaticResource RadiusSm}"
+                                                Padding="13,10" Margin="0,0,0,6">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Description}" FontSize="{StaticResource FontSm}" TextWrapping="Wrap" />
+                                                <WrapPanel Margin="0,4,0,0">
+                                                    <TextBlock Text="{Binding At, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}"
+                                                               Style="{StaticResource Mono}" Margin="0,0,10,0" />
+                                                    <TextBlock Text="{Binding Engine}" Style="{StaticResource Mono}" Margin="0,0,10,0" />
+                                                    <TextBlock Text="{Binding RuleId}" Style="{StaticResource Mono}" />
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+
+                <!-- ============ 5 · ABOUT ============ -->
+                <ScrollViewer Style="{StaticResource PageScroller}" Padding="{StaticResource PagePadding}"
+                              AutomationProperties.Name="About"
+                              Visibility="{Binding SelectedPage, Converter={StaticResource IdxVis}, ConverterParameter=5}">
+                    <StackPanel MaxWidth="800" HorizontalAlignment="Left">
+                        <TextBlock Text="About Anti-Google" Style="{StaticResource H1}" />
+                        <TextBlock Text="{Binding VersionLabel}" Style="{StaticResource Mono}" Margin="0,8,0,0" />
+
+                        <Border Style="{StaticResource Card}" Margin="0,20,0,14">
+                            <StackPanel>
+                                <TextBlock Text="What this actually does" Style="{StaticResource H2}" />
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
+                                           Text="Four independent layers, each separately reversible: hosts-file sinkholing (IPv4 and IPv6), Windows Firewall outbound blocks, service and scheduled-task control, and Chrome/Edge enterprise policy values." />
+                                <TextBlock Style="{StaticResource Muted}"
+                                           Text="It does not install a driver, a filter, or a background service. When it is not running, it is not doing anything — the changes it made are ordinary Windows configuration you could have made by hand." />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="Limits worth knowing" Style="{StaticResource H2}" />
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
+                                           Text="• Hosts entries have no wildcards. Every subdomain has to be listed by name, so a Google host not in the catalog is not blocked." />
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
+                                           Text="• Software using DNS-over-HTTPS bypasses the hosts file entirely. The DoH policy rule closes that hole for Chrome and Edge, but other apps ship their own resolvers." />
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
+                                           Text="• Only firewall IP rules stop software that connects to hardcoded addresses. They are also the bluntest layer, which is why they are off by default." />
+                                <TextBlock Style="{StaticResource Muted}"
+                                           Text="• This reduces Google's reach. It does not make you anonymous, and it is not a substitute for a browser that does not report to Google in the first place." />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}" Background="#22FFA940"
+                                BorderBrush="{StaticResource SevNotable}">
+                            <StackPanel>
+                                <TextBlock Text="The default profile is Aggressive" Style="{StaticResource H2}"
+                                           Foreground="{StaticResource SevNotable}" />
+                                <TextBlock Style="{StaticResource Muted}"
+                                           Text="This build ships armed at the Aggressive tier, which blackholes googleapis.com and gstatic.com. That breaks Google Fonts, some reCAPTCHA flows, Firebase push notifications, Chromecast and Android tooling. Content blocks (Search, YouTube, Google sign-in) and the IP-range sledgehammers stay off until you explicitly consent to each one. Read the Impact report before applying." />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- GPLv3 §5(d): an interactive program must display an Appropriate Legal
+                             Notice. This is it. -->
+                        <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Licence" Style="{StaticResource H2}" />
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8">
+                                    <Run Text="Anti-Google" />
+                                    <Run Text="{Binding VersionLabel, Mode=OneWay}" />
+                                    <LineBreak />
+                                    <Run Text="Copyright (C) 2026 The Anti-Google contributors" />
+                                </TextBlock>
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
+                                           Text="This program comes with ABSOLUTELY NO WARRANTY. It is free software, and you are welcome to redistribute it under the terms of the GNU General Public License, version 3 or later." />
+                                <TextBlock Style="{StaticResource Muted}"
+                                           Text="The full licence ships alongside this program as LICENSE, and is also at https://www.gnu.org/licenses/gpl-3.0.html — including the source, which you are entitled to." />
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Style="{StaticResource Mono}" Margin="0,18,0,0"
+                                   Text="Data, logs and backups: %ProgramData%\AntiGoogle" />
+                    </StackPanel>
+                </ScrollViewer>
+
+            </Grid>
+
+            <!-- ============ RESULT BANNER (every page) ============
+                 Was a card at the bottom of the Dashboard only, styled in the quietest text in
+                 the app — so a FAILED apply was both invisible and unreachable from four of the
+                 six pages. -->
+            <Border Grid.Row="1" Margin="32,0,32,20" Padding="14,12"
+                    CornerRadius="{StaticResource RadiusMd}" BorderThickness="1"
+                    Background="{Binding LastResultLevel, Converter={StaticResource LevelFill}}"
+                    BorderBrush="{Binding LastResultLevel, Converter={StaticResource LevelBrush}}"
+                    Visibility="{Binding LastResult, Converter={StaticResource StrVis}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <!-- Live region lives on the TextBlock, not the Border: Border derives from Decorator and
+                         has NO automation peer at all, so both attached properties were dead code and a
+                         failed Apply was announced to nobody. Assertive because a failure must interrupt. -->
+                    <TextBlock x:Name="ResultBannerText" Grid.Column="0" Text="{Binding LastResult}"
+                               TextWrapping="Wrap" VerticalAlignment="Center"
+                               AutomationProperties.LiveSetting="Assertive"
+                               Foreground="{Binding LastResultLevel, Converter={StaticResource LevelBrush}}" />
+                    <Button Grid.Column="1" Content="Dismiss" Style="{StaticResource GhostButton}"
+                            Margin="14,0,0,0" Padding="10,5"
+                            Command="{Binding ClearResultCommand}" />
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ============ OVERLAYS ============
+             Children of the ROOT grid spanning both columns at row 1, so they cover the nav rail
+             as well as the content. Previously they lived inside the content column: the rail
+             stayed live during an Apply, which meant you could change pages mid-confirmation and
+             — much worse — click "Restart as Administrator", which calls Application.Shutdown(),
+             while a destructive operation was running.
+
+             They deliberately do NOT cover the title bar: minimise and close must stay reachable
+             even during a long apply.
+
+             IsEnabled on the rail and content (above) is what stops Tab reaching the controls
+             behind a modal; the scrim alone never did. -->
+
+        <!-- Busy.
+             Focusable because it has no focusable children at all — without it, disabling the
+             content behind leaves focus nowhere and the keyboard is completely dead while a
+             machine-wide apply runs. TabNavigation=Cycle keeps Tab inside each modal. -->
+        <Grid x:Name="BusyOverlay" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Panel.ZIndex="10"
+              Background="#CC0E1013"
+              Focusable="True" KeyboardNavigation.TabNavigation="Cycle"
+              AutomationProperties.Name="Working, please wait"
+              Visibility="{Binding IsBusy, Converter={StaticResource BoolVis}}">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="520">
+                <TextBlock x:Name="BusyMessageText" Text="{Binding BusyMessage}" HorizontalAlignment="Center"
+                           TextWrapping="Wrap" TextAlignment="Center" FontSize="{StaticResource FontMd}"
+                           AutomationProperties.LiveSetting="Assertive" />
+                <ProgressBar IsIndeterminate="True" Width="300" Margin="0,18,0,0" />
+                <TextBlock Style="{StaticResource Muted}" Margin="0,16,0,0" HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           Text="Every change is journalled before it is made. Closing the app now still leaves a complete way back." />
+            </StackPanel>
+        </Grid>
+
+        <!-- Confirm before apply -->
+        <Grid x:Name="ConfirmOverlay" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Panel.ZIndex="11"
+              Background="#E60E1013"
+              KeyboardNavigation.TabNavigation="Cycle"
+              AutomationProperties.Name="Confirm before applying"
+              Visibility="{Binding ShowConfirm, Converter={StaticResource BoolVis}}">
+            <!-- Margin, not MaxHeight: at the window's own 640px minimum a fixed MaxHeight="680"
+                 pushed the accept checkbox and the Apply/Cancel buttons off-screen with no way to
+                 scroll to them, making the gate on the destructive action unusable. -->
+            <Border Style="{StaticResource Card}" MaxWidth="760" Margin="48,28"
+                    VerticalAlignment="Center" HorizontalAlignment="Center" Padding="26"
+                    BorderBrush="{StaticResource SevSevere}">
+                <!-- A Grid, not a DockPanel. DockPanel needs its fill child LAST in markup, which
+                     put the "I have read what will break" gate BEFORE the list it refers to in
+                     reading order — a screen-reader user was asked to accept the consequences
+                     before being told them. Grid rows let markup order match visual order. -->
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Margin="0,0,0,16">
+                        <TextBlock Text="Confirm before applying" Style="{StaticResource H1}"
+                                   FontSize="{StaticResource FontXl}" />
+                        <TextBlock Text="{Binding ConfirmHeadline}" Style="{StaticResource Muted}" Margin="0,6,0,0" />
+                    </StackPanel>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Focusable="True"
+                                  AutomationProperties.Name="What will stop working">
+                        <StackPanel>
+                            <TextBlock Text="WHAT WILL STOP WORKING" Style="{StaticResource Eyebrow}" Margin="0,0,0,10" />
+                            <ItemsControl ItemsSource="{Binding ConfirmDegradations}"
+                                          ItemTemplate="{StaticResource DegradationTemplate}" />
+
+                            <TextBlock Text="CHANGES TO BE MADE" Style="{StaticResource Eyebrow}" Margin="0,16,0,10" />
+                            <ItemsControl ItemsSource="{Binding ConfirmChanges}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Description}" Style="{StaticResource Mono}"
+                                                   Margin="0,0,0,4" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <StackPanel Grid.Row="2" Margin="0,16,0,0">
+                        <CheckBox Style="{StaticResource ConsentCheckBox}"
+                                  IsChecked="{Binding ConfirmAccepted, Mode=TwoWay}" Margin="0,0,0,14"
+                                  AutomationProperties.Name="I have read what will break and I want to apply these changes">
+                            <TextBlock Text="I have read what will break and I want to apply these changes"
+                                       TextWrapping="Wrap" />
+                        </CheckBox>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Apply now" Style="{StaticResource DangerButton}" Margin="0,0,10,0"
+                                    Command="{Binding ConfirmApplyCommand}"
+                                    IsEnabled="{Binding ConfirmAccepted}" />
+                            <Button Content="Cancel" Style="{StaticResource BaseButton}"
+                                    Command="{Binding CancelConfirmCommand}" IsCancel="True" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Typed consent -->
+        <Grid x:Name="ConsentOverlay" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Panel.ZIndex="12"
+              Background="#E60E1013"
+              KeyboardNavigation.TabNavigation="Cycle"
+              AutomationProperties.Name="This rule can lock you out"
+              Visibility="{Binding ShowConsent, Converter={StaticResource BoolVis}}">
+            <Border Style="{StaticResource Card}" MaxWidth="620" Margin="48,28"
+                    VerticalAlignment="Center" HorizontalAlignment="Center" Padding="26"
+                    BorderBrush="{StaticResource SevSevere}">
+                <!-- Grid rather than DockPanel for the same reason as the confirm overlay: the
+                     consequences must be read before the box that accepts them. -->
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0">
+                        <TextBlock Text="This rule can lock you out" Style="{StaticResource H1}"
+                                   FontSize="{StaticResource FontXl}"
+                                   Foreground="{StaticResource SevSevere}" />
+                        <TextBlock Text="{Binding ConsentTitle}" FontWeight="SemiBold"
+                                   FontSize="{StaticResource FontMd}" Margin="0,10,0,10" TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Focusable="True"
+                                  AutomationProperties.Name="What this rule breaks">
+                        <TextBlock Text="{Binding ConsentBody}" Style="{StaticResource Muted}" />
+                    </ScrollViewer>
+
+                    <StackPanel Grid.Row="2">
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,16,0,6">
+                            <Run Text="Type" />
+                            <Run Text="{Binding ConsentPhrase, Mode=OneWay}" FontWeight="Bold"
+                                 Foreground="{StaticResource Text}" />
+                            <Run Text="below to confirm you understand and want this rule armed." />
+                        </TextBlock>
+                        <TextBox Text="{Binding ConsentTyped, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,14"
+                                 AutomationProperties.Name="Confirmation phrase" />
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Arm this rule" Style="{StaticResource DangerButton}" Margin="0,0,10,0"
+                                    Command="{Binding ConfirmConsentCommand}"
+                                    IsEnabled="{Binding ConsentSatisfied}" />
+                            <Button Content="Cancel" Style="{StaticResource BaseButton}"
+                                    Command="{Binding CancelConsentCommand}" IsCancel="True" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+    </Grid>
+</Window>

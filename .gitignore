@@ -1,0 +1,38 @@
+# ---- Build output ----
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+release/
+artifacts/
+*.user
+*.suo
+*.userprefs
+
+# ---- IDE ----
+.vs/
+.vscode/
+.idea/
+*.swp
+*~
+
+# ---- Test / coverage ----
+TestResults/
+*.trx
+*.coverage
+coverage*.xml
+
+# ---- NuGet ----
+*.nupkg
+packages/
+.packages/
+
+# ---- OS ----
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ---- Deliberately NOT ignored ----
+# src/AntiGoogle.App/Assets/    the generated .ico and PNGs are committed; the
+#                              build references the .ico and the README the PNGs.
+# docs/screenshots/            committed so the README renders on GitHub.

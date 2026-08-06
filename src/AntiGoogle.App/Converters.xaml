@@ -1,0 +1,19 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:AntiGoogle.App">
+
+    <local:BoolToVisibility x:Key="BoolVis" />
+    <local:InverseBoolToVisibility x:Key="NotBoolVis" />
+    <local:InverseBool x:Key="Not" />
+    <local:CountToVisibility x:Key="CountVis" />
+    <local:StringToVisibility x:Key="StrVis" />
+    <local:SeverityToBrush x:Key="SevBrush" />
+    <local:FindingLevelToBrush x:Key="FindBrush" />
+    <local:TierToBrush x:Key="TierBrush" />
+    <local:IndexToVisibility x:Key="IdxVis" />
+    <local:LevelToBrush x:Key="LevelBrush" />
+    <local:LevelToFill x:Key="LevelFill" />
+    <local:SeverityToLabel x:Key="SevLabel" />
+    <local:FindingLevelToLabel x:Key="FindLabel" />
+
+</ResourceDictionary>

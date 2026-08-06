@@ -1,0 +1,715 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+                    xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework">
+
+    <!-- ==================================================================
+         PALETTE
+         Cold, technical dark. Severity colours are the loudest thing on
+         screen by design: this app's job is to say what it is about to break.
+         Contrast ratios below are measured against Surface #16191F.
+         ================================================================== -->
+    <SolidColorBrush x:Key="Bg"                Color="#0E1013" />
+    <SolidColorBrush x:Key="Surface"           Color="#16191F" />
+    <SolidColorBrush x:Key="Surface2"          Color="#1D2128" />
+    <SolidColorBrush x:Key="Surface3"          Color="#252A33" />
+    <SolidColorBrush x:Key="BorderBrushSoft"   Color="#2A2F38" />
+    <!-- Was #3A424F, which gave button and TextBox edges 1.2-1.9:1 against their own fill — no
+         perceivable boundary. #626D80 measures 3.09:1 on Surface2, clearing the 3:1 that WCAG
+         asks of a non-text control boundary. -->
+    <SolidColorBrush x:Key="BorderBrushStrong" Color="#626D80" />
+
+    <SolidColorBrush x:Key="Text"      Color="#E6E9EF" />   <!-- 13.9:1 -->
+    <SolidColorBrush x:Key="TextMuted" Color="#8B94A3" />   <!--  5.5:1 -->
+    <!-- Was #5E6773 at 3.0:1, which failed AA everywhere it was used - and it was used for
+         every section header on the hero Impact screen. #7C8695 measures 4.77:1. -->
+    <SolidColorBrush x:Key="TextFaint" Color="#7C8695" />   <!--  4.8:1 -->
+
+    <SolidColorBrush x:Key="Accent"    Color="#FF5A4E" />
+    <SolidColorBrush x:Key="Info"      Color="#4DA3FF" />
+    <!-- Keyboard focus. Deliberately the one colour used for nothing else, so a focus ring is
+         never confusable with a state or a severity. -->
+    <SolidColorBrush x:Key="FocusBrush" Color="#4DA3FF" />
+
+    <SolidColorBrush x:Key="SevSevere"  Color="#FF4D4F" />
+    <SolidColorBrush x:Key="SevNotable" Color="#FFA940" />
+    <SolidColorBrush x:Key="SevMinor"   Color="#FFD666" />
+    <SolidColorBrush x:Key="SevNone"    Color="#52C41A" />
+
+    <FontFamily x:Key="UiFont">Segoe UI Variable Display, Segoe UI, sans-serif</FontFamily>
+    <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, Courier New, monospace</FontFamily>
+
+    <!-- ==================================================================
+         SCALE
+         One type ramp and one radius ramp. Before this there were 16 ad-hoc
+         font sizes and 6 corner radii scattered through MainWindow.xaml.
+         ================================================================== -->
+    <!-- Below the ramp on purpose: the uppercase micro-type used inside chips and severity tags,
+         where the all-caps weight carries legibility that 10px lowercase would not. -->
+    <sys:Double x:Key="FontChip">10</sys:Double>
+    <sys:Double x:Key="FontXs">11</sys:Double>
+    <sys:Double x:Key="FontSm">12</sys:Double>
+    <sys:Double x:Key="FontBase">13</sys:Double>
+    <sys:Double x:Key="FontMd">14</sys:Double>
+    <sys:Double x:Key="FontLg">16</sys:Double>
+    <sys:Double x:Key="FontXl">21</sys:Double>
+    <sys:Double x:Key="Font2Xl">26</sys:Double>
+
+    <CornerRadius x:Key="RadiusXs">3</CornerRadius>
+    <CornerRadius x:Key="RadiusSm">5</CornerRadius>
+    <CornerRadius x:Key="RadiusMd">6</CornerRadius>
+    <CornerRadius x:Key="RadiusLg">8</CornerRadius>
+
+    <Thickness x:Key="CardPadding">18</Thickness>
+    <Thickness x:Key="PagePadding">32,28</Thickness>
+
+    <sys:Double x:Key="TitleBarHeight">40</sys:Double>
+
+    <!-- ==================================================================
+         TEXT
+         ================================================================== -->
+    <!--
+        Foreground and FontSize are deliberately NOT set here.
+
+        An implicit style applies INSIDE control templates too — including the TextBlock that
+        ContentPresenter generates for string Content — and a style setter outranks property
+        inheritance. Setting them here silently overrode every control's own Foreground/FontSize.
+        Measured: DangerButton's #120706 label rendered #E6E9EF (2.53:1 on the accent — the app's
+        primary destructive action failing AA), GhostButton and unselected NavItem lost TextMuted,
+        disabled CheckBox labels lost TextFaint, NavItem rendered 13 instead of 13.5, and ToolTip
+        text rendered #E6E9EF on WPF's default #F1F2F7 tooltip background at 1.09:1 — invisible.
+
+        They are inherited from the Window instead (see MainWindow.xaml), which every control can
+        then legitimately override. FontFamily stays: CaptionButton overrides it locally via
+        TemplateBinding, which is what keeps the caption glyphs from rendering as tofu.
+    -->
+    <Style TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+    </Style>
+
+    <!--
+        Popups do NOT inherit from the Window — measured — so without this tooltips keep WPF's
+        default light chrome in a #0E1013 app.
+    -->
+    <Style TargetType="ToolTip">
+        <Setter Property="Background" Value="{StaticResource Surface3}" />
+        <Setter Property="Foreground" Value="{StaticResource Text}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrushStrong}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSm}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource RadiusSm}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="H1" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource Text}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="{StaticResource Font2Xl}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="AutomationProperties.HeadingLevel" Value="Level1" />
+    </Style>
+
+    <Style x:Key="H2" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource Text}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="{StaticResource FontLg}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Margin" Value="0,0,0,8" />
+        <Setter Property="AutomationProperties.HeadingLevel" Value="Level2" />
+    </Style>
+
+    <!-- Section labels. Now TextMuted rather than TextFaint: these are the wayfinding on the
+         hero screen and they were the faintest text in the app. -->
+    <Style x:Key="Eyebrow" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="{StaticResource FontXs}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="AutomationProperties.HeadingLevel" Value="Level3" />
+    </Style>
+
+    <!-- Stat captions under a big number - decorative, and the number carries the meaning. -->
+    <Style x:Key="EyebrowFaint" TargetType="TextBlock" BasedOn="{StaticResource Eyebrow}">
+        <Setter Property="Foreground" Value="{StaticResource TextFaint}" />
+        <Setter Property="AutomationProperties.HeadingLevel" Value="None" />
+    </Style>
+
+    <Style x:Key="Muted" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSm}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style x:Key="Mono" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+        <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSm}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <!-- ==================================================================
+         SURFACES
+         ================================================================== -->
+    <Style x:Key="Card" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource Surface}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrushSoft}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusLg}" />
+        <Setter Property="Padding" Value="{StaticResource CardPadding}" />
+    </Style>
+
+    <Style x:Key="Row" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource Surface2}" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}" />
+        <Setter Property="Padding" Value="14,11" />
+        <Setter Property="Margin" Value="0,0,0,7" />
+    </Style>
+
+    <!-- ==================================================================
+         BUTTONS
+         Every interactive control in this file carries hover, PRESSED and
+         KEYBOARD FOCUS states. Previously there were only hover and disabled:
+         clicking "Apply protection" gave no tactile confirmation, and a Tab
+         user could not see where they were (the default WPF focus adorner is
+         a dotted rectangle, invisible on #0E1013).
+         ================================================================== -->
+    <Style x:Key="BaseButton" TargetType="Button">
+        <Setter Property="Foreground" Value="{StaticResource Text}" />
+        <Setter Property="Background" Value="{StaticResource Surface2}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrushStrong}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="16,9" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="{StaticResource FontBase}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource RadiusMd}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <Border x:Name="FocusRing" CornerRadius="8" Margin="-3" BorderThickness="2"
+                                BorderBrush="{StaticResource FocusBrush}" Opacity="0"
+                                IsHitTestVisible="False" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource Surface3}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource Surface}" />
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BorderBrushStrong}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Overrides brushes only. The template is inherited so the focus ring cannot drift. -->
+    <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource BaseButton}">
+        <Setter Property="Background" Value="{StaticResource Accent}" />
+        <Setter Property="Foreground" Value="#120706" />
+        <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
+                                CornerRadius="{StaticResource RadiusMd}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <Border x:Name="FocusRing" CornerRadius="8" Margin="-3" BorderThickness="2"
+                                BorderBrush="{StaticResource Text}" Opacity="0" IsHitTestVisible="False" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#FF7368" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#E04A3F" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="GhostButton" TargetType="Button" BasedOn="{StaticResource BaseButton}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrushSoft}" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Padding" Value="12,7" />
+    </Style>
+
+    <!--
+        A real tick box, not the toggle switch the implicit CheckBox style draws.
+
+        Used for the "I have read what will break" gate. A switch reads as a setting you flip; a
+        consent gate should read as something you tick. The label is a wrapping TextBlock rather
+        than bare string Content, so a long consent sentence cannot be clipped at a narrow width.
+    -->
+    <Style x:Key="ConsentCheckBox" TargetType="CheckBox">
+        <Setter Property="Foreground" Value="{StaticResource Text}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="{StaticResource FontBase}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Grid Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Grid Grid.Column="0" Width="24" Height="24" VerticalAlignment="Top">
+                            <Border x:Name="Box" Width="19" Height="19"
+                                    CornerRadius="{StaticResource RadiusSm}"
+                                    Background="{StaticResource Surface3}"
+                                    BorderBrush="{StaticResource BorderBrushStrong}" BorderThickness="1.5" />
+                            <Path x:Name="Tick" Width="12" Height="12" Stretch="Uniform"
+                                  Data="M2,8 L6,12 L14,3" Stroke="#120706" StrokeThickness="2.4"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round" Opacity="0" />
+                            <Border x:Name="FocusRing" CornerRadius="7" Margin="-2" BorderThickness="2"
+                                    BorderBrush="{StaticResource FocusBrush}" Opacity="0"
+                                    IsHitTestVisible="False" />
+                        </Grid>
+
+                        <ContentPresenter Grid.Column="1" Margin="10,2,0,0" VerticalAlignment="Center" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Box" Property="Background" Value="{StaticResource Accent}" />
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Accent}" />
+                            <Setter TargetName="Tick" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Text}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ==================================================================
+         CAPTION BUTTONS (custom title bar)
+         46x40: 46 is the Windows standard hit width; 40 matches the bar so
+         the button reaches the very top screen edge when maximised and stays
+         throwable-at.
+         ================================================================== -->
+    <SolidColorBrush x:Key="CaptionHover"        Color="#242932" />
+    <SolidColorBrush x:Key="CaptionPressed"      Color="#1A1E25" />
+    <SolidColorBrush x:Key="CaptionCloseHover"   Color="#E81123" />
+    <SolidColorBrush x:Key="CaptionClosePressed" Color="#F1707A" />
+
+    <Style x:Key="CaptionButton" TargetType="Button">
+        <Setter Property="Width" Value="46" />
+        <Setter Property="Height" Value="{StaticResource TitleBarHeight}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+        <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
+        <Setter Property="FontSize" Value="10" />
+        <!-- Out of the tab order, matching native caption buttons (reached via Alt+Space /
+             Alt+F4, which still work because WindowStyle stays SingleBorderWindow). This does
+             NOT remove them from the automation tree - they stay named and invokable. -->
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <!-- Without this the caption swallows the click and the button is dead. -->
+        <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}">
+                        <!-- FontFamily/FontSize/Foreground set EXPLICITLY: the implicit TextBlock
+                             style above applies inside control templates too, and would force
+                             Segoe UI Variable here, rendering the caption glyphs as tofu.
+                             Text uses a Binding rather than TemplateBinding because
+                             TemplateBinding does not reliably convert object -> string. -->
+                        <TextBlock x:Name="Glyph"
+                                   Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
+                                   FontFamily="{TemplateBinding FontFamily}"
+                                   FontSize="{TemplateBinding FontSize}"
+                                   Foreground="{TemplateBinding Foreground}"
+                                   TextOptions.TextFormattingMode="Display"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource CaptionHover}" />
+                            <Setter TargetName="Glyph" Property="Foreground" Value="{StaticResource Text}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource CaptionPressed}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Content is set HERE, never inline on the button: a locally set Content outranks a Style
+         trigger, which would freeze the glyph on "maximise" forever. -->
+    <Style x:Key="CaptionMaximizeButton" TargetType="Button" BasedOn="{StaticResource CaptionButton}">
+        <Setter Property="Content" Value="&#xE922;" />
+        <Setter Property="ToolTip" Value="Maximize" />
+        <Setter Property="AutomationProperties.Name" Value="Maximize" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}"
+                         Value="Maximized">
+                <Setter Property="Content" Value="&#xE923;" />
+                <Setter Property="ToolTip" Value="Restore Down" />
+                <Setter Property="AutomationProperties.Name" Value="Restore Down" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Needs its own Template rather than BasedOn: a derived Style cannot retarget a TargetName
+         setter inside the base Style's ControlTemplate triggers. -->
+    <Style x:Key="CaptionCloseButton" TargetType="Button" BasedOn="{StaticResource CaptionButton}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}">
+                        <TextBlock x:Name="Glyph"
+                                   Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
+                                   FontFamily="{TemplateBinding FontFamily}"
+                                   FontSize="{TemplateBinding FontSize}"
+                                   Foreground="{TemplateBinding Foreground}"
+                                   TextOptions.TextFormattingMode="Display"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource CaptionCloseHover}" />
+                            <Setter TargetName="Glyph" Property="Foreground" Value="White" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource CaptionClosePressed}" />
+                            <Setter TargetName="Glyph" Property="Foreground" Value="White" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ==================================================================
+         NAV RAIL
+         ================================================================== -->
+    <Style x:Key="NavList" TargetType="ListBox">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="AutomationProperties.Name" Value="Sections" />
+    </Style>
+
+    <Style x:Key="NavItem" TargetType="ListBoxItem">
+        <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="13.5" />
+        <Setter Property="Padding" Value="14,10" />
+        <Setter Property="Margin" Value="8,2" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Grid>
+                        <Border x:Name="Bd" Background="Transparent"
+                                CornerRadius="{StaticResource RadiusMd}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter />
+                        </Border>
+                        <!-- A 3px bar on the selected item, so selection is not colour-only. -->
+                        <Border x:Name="Marker" Width="3" Height="18" CornerRadius="2"
+                                HorizontalAlignment="Left" Margin="-8,0,0,0"
+                                Background="{StaticResource Accent}" Opacity="0" />
+                        <Border x:Name="FocusRing" CornerRadius="8" Margin="-2" BorderThickness="2"
+                                BorderBrush="{StaticResource FocusBrush}" Opacity="0"
+                                IsHitTestVisible="False" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource Surface2}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource Surface3}" />
+                            <Setter TargetName="Marker" Property="Opacity" Value="1" />
+                            <Setter Property="Foreground" Value="{StaticResource Text}" />
+                            <Setter Property="FontWeight" Value="SemiBold" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ==================================================================
+         TOGGLE (CheckBox)
+         The most-clicked control in the app, and the one that arms
+         system-wide destructive rules. It previously had NO hover state and
+         an OFF-state boundary measuring 1.22:1 - practically invisible.
+         ================================================================== -->
+    <Style TargetType="CheckBox">
+        <Setter Property="Foreground" Value="{StaticResource Text}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="{StaticResource FontBase}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <StackPanel Orientation="Horizontal" Background="Transparent">
+                        <!-- Height 24 with a transparent fill so the HIT TARGET clears the 24x24
+                             minimum, while the visible pill stays 20 tall. An unlabelled 36x20
+                             toggle is the smallest target in the app and it arms system-wide rules. -->
+                        <Grid VerticalAlignment="Center" Height="24" Background="Transparent">
+                            <Border x:Name="Box" Width="36" Height="20" CornerRadius="10"
+                                    Background="{StaticResource Surface3}"
+                                    BorderBrush="#6B7583" BorderThickness="1.5" />
+                            <Ellipse x:Name="Knob" Width="13" Height="13" Fill="#B4BDCA"
+                                     HorizontalAlignment="Left" Margin="4,0,0,0" />
+                            <Border x:Name="FocusRing" CornerRadius="12" Margin="-3" BorderThickness="2"
+                                    BorderBrush="{StaticResource FocusBrush}" Opacity="0"
+                                    IsHitTestVisible="False" />
+                        </Grid>
+                        <ContentPresenter x:Name="Label" Margin="10,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Box" Property="Background" Value="{StaticResource Accent}" />
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Accent}" />
+                            <Setter TargetName="Knob" Property="Fill" Value="#120706" />
+                            <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right" />
+                            <Setter TargetName="Knob" Property="Margin" Value="0,0,4,0" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Text}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Knob" Property="Width" Value="15" />
+                            <Setter TargetName="Knob" Property="Height" Value="15" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Box" Property="Opacity" Value="0.4" />
+                            <Setter Property="Foreground" Value="{StaticResource TextFaint}" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ==================================================================
+         INLINE DISCLOSURE TOGGLE
+         The affordance that reveals what a rule breaks. Its label lives in
+         Content now rather than hardcoded in the template, so screen readers
+         announce it instead of reading an unnamed toggle.
+         ================================================================== -->
+    <Style x:Key="LinkToggle" TargetType="ToggleButton">
+        <Setter Property="Foreground" Value="{StaticResource Info}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontSize" Value="{StaticResource FontSm}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="Content" Value="Show detail" />
+        <Setter Property="AutomationProperties.Name" Value="Show detail" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Bd" Background="Transparent" Padding="3,2" CornerRadius="4"
+                            BorderThickness="2" BorderBrush="Transparent">
+                        <TextBlock x:Name="Txt"
+                                   Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
+                                   Foreground="{TemplateBinding Foreground}"
+                                   FontSize="{TemplateBinding FontSize}"
+                                   FontFamily="{TemplateBinding FontFamily}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Txt" Property="Text" Value="Hide detail" />
+                            <Setter Property="AutomationProperties.Name" Value="Hide detail" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Txt" Property="TextDecorations" Value="Underline" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource FocusBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ==================================================================
+         TEXTBOX
+         ================================================================== -->
+    <Style TargetType="TextBox">
+        <Setter Property="Background" Value="{StaticResource Surface3}" />
+        <Setter Property="Foreground" Value="{StaticResource Text}" />
+        <Setter Property="CaretBrush" Value="{StaticResource Accent}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrushStrong}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="10,7" />
+        <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+        <Setter Property="FontSize" Value="{StaticResource FontBase}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource RadiusMd}" Padding="{TemplateBinding Padding}">
+                        <ScrollViewer x:Name="PART_ContentHost" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource FocusBrush}" />
+                            <Setter TargetName="Bd" Property="BorderThickness" Value="2" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ==================================================================
+         SCROLLING
+         Focusable so arrow keys / PageUp / PageDown work without first
+         tabbing to a child. Two pages previously could not be scrolled by
+         keyboard at all.
+         ================================================================== -->
+    <Style x:Key="PageScroller" TargetType="ScrollViewer">
+        <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+        <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="Focusable" Value="True" />
+        <Setter Property="Padding" Value="32,0,32,28" />
+        <!-- A focusable ScrollViewer with no focus visual is a keyboard dead end: you Tab to it,
+             arrow keys work, and nothing on screen says so. -->
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ScrollViewer">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ScrollContentPresenter Grid.Column="0"
+                                                Margin="{TemplateBinding Padding}"
+                                                CanContentScroll="{TemplateBinding CanContentScroll}" />
+                        <ScrollBar Grid.Column="1" x:Name="PART_VerticalScrollBar"
+                                   Orientation="Vertical"
+                                   Value="{TemplateBinding VerticalOffset}"
+                                   Maximum="{TemplateBinding ScrollableHeight}"
+                                   ViewportSize="{TemplateBinding ViewportHeight}"
+                                   Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}" />
+                        <Border x:Name="FocusRing" Grid.ColumnSpan="2" BorderThickness="2"
+                                BorderBrush="{StaticResource FocusBrush}" Opacity="0"
+                                IsHitTestVisible="False" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="ScrollBar">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Width" Value="9" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ScrollBar">
+                    <Grid Background="Transparent">
+                        <Track x:Name="PART_Track" IsDirectionReversed="True">
+                            <Track.Thumb>
+                                <Thumb>
+                                    <Thumb.Template>
+                                        <ControlTemplate TargetType="Thumb">
+                                            <Border Background="{StaticResource BorderBrushStrong}"
+                                                    CornerRadius="4" Margin="2,0" />
+                                        </ControlTemplate>
+                                    </Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="ScrollBar.PageDownCommand" Opacity="0" />
+                            </Track.IncreaseRepeatButton>
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="ScrollBar.PageUpCommand" Opacity="0" />
+                            </Track.DecreaseRepeatButton>
+                        </Track>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="ProgressBar">
+        <Setter Property="Height" Value="3" />
+        <Setter Property="Background" Value="{StaticResource Surface3}" />
+        <Setter Property="Foreground" Value="{StaticResource Accent}" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+</ResourceDictionary>

@@ -1,0 +1,70 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        ANTI-GOOGLE LOGO — "Null Route"
+
+        An outbound data arrow driven hard to the right and arrested by a solid slab it never
+        reaches. The arrow is the telemetry beacon leaving your machine; the slab is the sink —
+        the hosts entry, the firewall rule, the disabled service. The gap between the arrowhead
+        and the slab is the actual subject: the packet does not bounce and it does not pass. It
+        simply stops, and nothing is drawn on the far side.
+
+        It is the only mark considered here that refuses metaphor. It does not draw protection
+        the way a shield or padlock does — it draws a flow and a hard stop, which is literally
+        what all four enforcement layers do. For an app whose whole pitch is that it will not
+        overclaim, a mark that claims only "this specific thing was stopped" is the honest one.
+
+        GEOMETRY IS PIXEL-HINTED. Ink bounds are exactly (4,4,56,56) on the 64x64 viewbox —
+        square, with 4 units of padding on every side. Every axis-aligned edge is divisible by 4,
+        so at 16px they land on whole pixels (1/4/12/15 across, 1/6/10/13/15 down) with zero
+        antialiasing on any straight edge. The same holds at 32, 64 and 256.
+
+        RULES (do not "improve" these away):
+          - Accent #FF5A4E on dark surfaces; ink on light. #FF5A4E on white is ~3:1 and fails at
+            icon scale.
+          - Never mirror it. Mirrored, the arrow enters the slab from the right and reads as
+            inbound/import — the opposite message.
+          - Never place it in a badge, ring, tile or rounded-square container. That is Google's
+            app-icon grammar regardless of what the glyph inside is, and it would also eat the
+            4 units of padding the geometry already carries.
+          - Never stroke it, rotate it, or use more than two tonal values.
+          - Clear space: 8 units at this scale. Minimum size: 16px.
+    -->
+
+    <!-- Canonical mark. Use everywhere except the hand-hinted small ICO frames. -->
+    <Geometry x:Key="LogoGeometry">F1 M4,24 H16 V12 L42,32 L16,52 V40 H4 Z M48,4 H60 V60 H48 Z</Geometry>
+
+    <!--
+        Small-size frame (16px and 32px ICO entries only).
+
+        The only difference is the arrow apex at 40 instead of 42, which opens the arrowhead-to-slab
+        gap from 6 to 8 units — exactly 2px at 16x16 and 4px at 32x32, on whole pixel boundaries.
+        At apex 42 that gap spans 10.5..12px, i.e. 1.5px straddling a boundary, and antialiases to
+        a grey smear on both flanks. The gap carries the entire meaning of the mark, so in the
+        smallest frame it has to be the crispest thing in it, not the softest.
+    -->
+    <Geometry x:Key="LogoGeometryIcon">F1 M4,24 H16 V12 L40,32 L16,52 V40 H4 Z M48,4 H60 V60 H48 Z</Geometry>
+
+    <!--
+        Full-bleed variant for the title bar and any instance at 48px or larger.
+
+        The slab runs off the top and bottom of the canvas. This is what separates the mark from
+        the media "skip to end" glyph, which pairs a triangle with a bar of equal or lesser height:
+        here the slab exceeds the 40-tall arrowhead by a wide margin and leaves the frame entirely.
+        A bar that leaves the frame reads as a wall or a system boundary; a bar contained inside it
+        reads as a UI glyph.
+    -->
+    <Geometry x:Key="LogoGeometryBleed">F1 M4,24 H16 V12 L42,32 L16,52 V40 H4 Z M48,0 H60 V64 H48 Z</Geometry>
+
+    <SolidColorBrush x:Key="LogoBrush" Color="#FF5A4E" />
+
+    <!--
+        Deliberately NOT defined: LogoPlateBrush.
+
+        IconGen will draw a rounded plate behind the mark if this key exists. It must not — a
+        rounded-square coloured tile is Material / Google app-icon grammar, and it would also
+        swallow the padding the geometry already carries. The .ico ships transparent.
+    -->
+
+</ResourceDictionary>

@@ -1,0 +1,84 @@
+name: Bug report
+description: Something behaved differently from what the app said it would
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **If this is a security issue — anything about apply/revert leaving a machine in a state
+        the user did not choose — please use
+        [private vulnerability reporting](../../security/advisories/new) instead of this form.**
+
+        **If a Google service stopped working after you applied a rule, that is probably not a bug.**
+        Check the Impact report: every rule states what it breaks. Open a bug if the breakage was
+        *not* declared, or if the description was wrong or misleading — that is a real defect and a
+        useful report.
+
+  - type: input
+    id: version
+    attributes:
+      label: Anti-Google version
+      description: Shown on the About page.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version and build
+      description: "`winver`, or Settings → System → About."
+      placeholder: "Windows 11 Pro 26200"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: elevated
+    attributes:
+      label: Were you running as administrator?
+      options:
+        - "Yes"
+        - "No"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+    validations:
+      required: true
+
+  - type: input
+    id: rule
+    attributes:
+      label: Which rule, if you know
+      description: The rule id from the Impact report, e.g. `hosts.api-frontdoors`.
+      placeholder: "hosts.api-frontdoors"
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: |
+        From `%ProgramData%\AntiGoogle\logs`. The app is written not to log secrets, but read it
+        before pasting.
+      render: text
+
+  - type: textarea
+    id: journal
+    attributes:
+      label: Journal (only if this is about apply or revert)
+      description: "`%ProgramData%\\AntiGoogle\\journal.json`. This is what makes changes reversible, so it is the most useful thing you can attach for that class of bug."
+      render: json
+
+  - type: checkboxes
+    id: state
+    attributes:
+      label: Machine state
+      options:
+        - label: "\"Restore everything\" put the machine back correctly"
+        - label: "\"Restore everything\" did NOT put the machine back correctly"
+        - label: I have not tried restoring yet

@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # WPF is Windows-only; there is no cross-platform runner option here.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore AntiGoogle.sln
+
+      - name: Build
+        run: dotnet build AntiGoogle.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test AntiGoogle.sln --configuration Release --no-build --verbosity normal
+
+      # The console runner links the same sources and runs the same [Fact]/[Theory] methods without
+      # a signed test host. Running both catches the case where one runner silently discovers
+      # nothing — which is exactly what Smart App Control does to `dotnet test`.
+      - name: Test again via the standalone runner
+        run: dotnet run --project tests/AntiGoogle.Verify --configuration Release --no-build
+
+      # The icon is generated from Logo.xaml and committed. If someone edits the logo without
+      # regenerating, the committed asset silently goes stale — fail instead.
+      - name: Verify the committed icon matches Logo.xaml
+        shell: pwsh
+        run: |
+          $before = (Get-FileHash src/AntiGoogle.App/Assets/AntiGoogle.ico -Algorithm SHA256).Hash
+          dotnet run --project tools/AntiGoogle.IconGen --configuration Release
+          $after = (Get-FileHash src/AntiGoogle.App/Assets/AntiGoogle.ico -Algorithm SHA256).Hash
+          if ($before -ne $after) {
+            Write-Error "AntiGoogle.ico is stale. Run: dotnet run --project tools/AntiGoogle.IconGen"
+            exit 1
+          }
+          Write-Host "Icon is current."

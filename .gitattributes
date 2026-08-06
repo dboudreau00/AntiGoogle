@@ -1,0 +1,36 @@
+# Normalise to LF in the repo, check out native on each platform.
+* text=auto
+
+# Windows-only tooling that must keep CRLF wherever it lands.
+*.ps1   text eol=crlf
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+*.sln   text eol=crlf
+
+# Source. Explicit so a contributor with odd git settings cannot introduce a
+# whitespace-only diff across the whole tree.
+*.cs        text diff=csharp
+*.xaml      text
+*.csproj    text
+*.md        text
+*.json      text
+*.yml       text
+*.manifest  text
+
+# Binary. Never diffed, never normalised — an .ico that gets line-ending
+# mangled stops being a valid icon.
+*.ico   binary
+*.png   binary
+*.jpg   binary
+*.gif   binary
+*.zip   binary
+*.dll   binary
+*.exe   binary
+
+# Generated from Logo.xaml by tools/AntiGoogle.IconGen. Committed because the
+# build needs them, but collapsed in PR diffs since reviewing them is pointless.
+docs/screenshots/*.png       linguist-generated=true
+src/AntiGoogle.App/Assets/*  linguist-generated=true
+
+# The licence should not skew the repo's language statistics.
+LICENSE text linguist-detectable=false

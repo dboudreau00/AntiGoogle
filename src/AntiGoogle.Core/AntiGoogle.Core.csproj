@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>AntiGoogle.Core</RootNamespace>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Lets the test projects reach internal helpers without widening the public API surface.
+         Both are listed because they compile the same linked sources into different assemblies. -->
+    <InternalsVisibleTo Include="AntiGoogle.Core.Tests" />
+    <InternalsVisibleTo Include="AntiGoogle.Verify" />
+  </ItemGroup>
+
+</Project>
