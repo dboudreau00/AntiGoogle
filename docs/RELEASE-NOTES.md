@@ -105,4 +105,4 @@ Other known gaps:
 [GPLv3 or later](https://www.gnu.org/licenses/gpl-3.0.html). Free software, no warranty; if you
 distribute a modified version you must pass the same freedoms — and the source — on with it.
 
-**Full changelog:** [CHANGELOG.md](https://github.com/<OWNER>/AntiGoogle/blob/main/CHANGELOG.md)
+**Full changelog:** [CHANGELOG.md](https://github.com/dboudreau00/AntiGoogle/blob/main/CHANGELOG.md)

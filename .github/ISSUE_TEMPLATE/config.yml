@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: Security vulnerability
-    url: https://github.com/<OWNER>/AntiGoogle/security/advisories/new
+    url: https://github.com/dboudreau00/AntiGoogle/security/advisories/new
     about: Report privately. Anything where apply or revert leaves a machine in a state the user did not choose.
   - name: A Google service stopped working
-    url: https://github.com/<OWNER>/AntiGoogle/blob/main/README.md#the-default-profile-is-aggressive
+    url: https://github.com/dboudreau00/AntiGoogle/blob/main/README.md#the-default-profile-is-aggressive
     about: Probably expected. Check the Impact report first — every rule declares what it breaks.

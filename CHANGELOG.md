@@ -80,4 +80,4 @@ anything without first seeing the full degradation list and ticking a box that s
 - Per-rule revert exists in the core but is not wired to the UI.
 - IP ranges are static by design and are not fetched at runtime.
 
-[0.1.0]: https://github.com/<OWNER>/AntiGoogle/releases/tag/v0.1.0
+[0.1.0]: https://github.com/dboudreau00/AntiGoogle/releases/tag/0.1.0
