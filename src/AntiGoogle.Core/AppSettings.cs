@@ -37,6 +37,26 @@ public sealed class AppSettings
     /// <summary>Executables the user has chosen to contain, by full path.</summary>
     public List<string> ContainedApps { get; set; } = [];
 
+    /// <summary>
+    /// Armed rules that run in local-only mode instead of being blocked: the service or task keeps
+    /// running, confined to this machine, and its hosts names resolve to loopback. A subset of
+    /// <see cref="EnabledRuleIds"/>; ids the catalog does not mark as supporting it are dropped on load.
+    /// </summary>
+    public List<string> LocalOnlyRuleIds { get; set; } = [];
+
+    /// <summary>
+    /// Executables kept running but confined to this machine, by full path. Stricter than
+    /// <see cref="ContainedApps"/>, which only blocks Google's ranges; an app in both lists is
+    /// treated as local-only.
+    /// </summary>
+    public List<string> LocalOnlyApps { get; set; } = [];
+
+    /// <summary>Markers the user has asked to be moved into the quarantine vault on the next Apply.</summary>
+    public List<string> QuarantineMarkerIds { get; set; } = [];
+
+    /// <summary>Markers whose typed confirmation the user has already given.</summary>
+    public List<string> AcknowledgedMarkerIds { get; set; } = [];
+
     /// <summary>The profile the user last selected. Shipped default is Aggressive.</summary>
     public RiskTier Profile { get; set; } = RiskTier.Aggressive;
 
@@ -58,6 +78,17 @@ public sealed class AppSettings
                     // Drop ids from an older catalog so a renamed rule cannot silently stay "armed".
                     var known = RuleCatalog.All.Select(r => r.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
                     loaded.EnabledRuleIds = loaded.EnabledRuleIds.Where(known.Contains).ToList();
+
+                    // Local-only is only meaningful for rules that declare its cost. A stale or
+                    // hand-edited id must not quietly switch a rule into a mode it never described.
+                    var localOnlyCapable = RuleCatalog.All.Where(r => r.SupportsLocalOnly)
+                        .Select(r => r.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    loaded.LocalOnlyRuleIds = (loaded.LocalOnlyRuleIds ?? [])
+                        .Where(localOnlyCapable.Contains).ToList();
+                    loaded.LocalOnlyApps ??= [];
+                    loaded.QuarantineMarkerIds ??= [];
+                    loaded.AcknowledgedMarkerIds ??= [];
+                    loaded.ContainedApps ??= [];
                     return loaded;
                 }
             }

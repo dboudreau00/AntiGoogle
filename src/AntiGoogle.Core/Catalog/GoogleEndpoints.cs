@@ -246,6 +246,107 @@ public static class GoogleEndpoints
         "youtubei.googleapis.com"
     ];
 
+    /// <summary>
+    /// Tracking and measurement hosts beyond the base Analytics and Advertising groups: Firebase
+    /// Analytics, ad-serving and conversion hosts, client metrics, and the ad traffic quality
+    /// endpoints. Cross-checked against two public blocklists (StevenBlack hosts and the AdGuard DNS
+    /// filter); each name appears in at least one. Dashboards and consoles (ads.google.com, admob.com,
+    /// marketingplatform.google.com) are deliberately NOT here: they are services, not trackers.
+    /// </summary>
+    public static readonly string[] MeasurementExtended =
+    [
+        "app-measurement.com",
+        "csi.gstatic.com",
+        "clientmetrics-pa.googleapis.com",
+        "clouderrorreporting.googleapis.com",
+        "federatedcompute-pa.googleapis.com",
+        "fcmatch.google.com",
+        "fundingchoicesmessages.google.com",
+        "adtrafficquality.google",
+        "ep1.adtrafficquality.google",
+        "ep2.adtrafficquality.google",
+        "video-stats.video.google.com",
+        "crashlytics.com",
+        "e.crashlytics.com",
+        "googleanalytics.com",
+        "ssl.googleanalytics.com",
+        "ssl-google-analytics.l.google.com",
+        "www-google-analytics.l.google.com",
+        "ade.googlesyndication.com",
+        "afs.googlesyndication.com",
+        "buttons.googlesyndication.com",
+        "pagead.googlesyndication.com",
+        "video-ad-stats.googlesyndication.com",
+        "partner.googleadservices.com",
+        "pagead2.googleadservices.com",
+        "adclick.g.doubleclick.net",
+        "adx.g.doubleclick.net",
+        "bid.g.doubleclick.net",
+        "dp.g.doubleclick.net",
+        "pubads.g.doubleclick.net",
+        "securepubads.g.doubleclick.net",
+        "feedads.g.doubleclick.net",
+        "g.doubleclick.net",
+        "fls.doubleclick.net",
+        "static.doubleclick.net",
+        "m.doubleclick.net",
+        "mediavisor.doubleclick.net",
+        "googleads2.g.doubleclick.net",
+        "googleads4.g.doubleclick.net",
+        "ad-g.doubleclick.net",
+        "pagead.l.google.com",
+        "pagead-googlehosted.l.google.com",
+        "partnerad.l.google.com",
+        "partnerad.l.doubleclick.net",
+        "m.2mdn.net",
+        "static.2mdn.net",
+        "gcdn.2mdn.net"
+    ];
+
+    /// <summary>
+    /// Mandiant marketing trackers. Both hosts are flagged as trackers by the AdGuard DNS filter. They
+    /// are web-form and marketing-automation hosts, not part of any security product's channel.
+    /// </summary>
+    public static readonly string[] MandiantTracking =
+    [
+        "app.connect.mandiant.com",
+        "images.connect.mandiant.com"
+    ];
+
+    /// <summary>
+    /// Mandiant's portal, API and website. advantage.mandiant.com and api.intelligence.mandiant.com
+    /// are named by third-party integration documentation (Google Cloud SOAR, Sumo Logic), not by a
+    /// Mandiant network requirements page, which could not be found.
+    /// </summary>
+    public static readonly string[] MandiantServices =
+    [
+        "mandiant.com",
+        "www.mandiant.com",
+        "advantage.mandiant.com",
+        "api.intelligence.mandiant.com"
+    ];
+
+    /// <summary>VirusTotal. Documented API base is https://www.virustotal.com/api/v3/.</summary>
+    public static readonly string[] VirusTotal =
+    [
+        "virustotal.com",
+        "www.virustotal.com"
+    ];
+
+    /// <summary>
+    /// Google SecOps (Chronicle) legacy ingestion endpoints, from Google's ingestion API reference. The
+    /// newer API uses chronicle.REGION.rep.googleapis.com, and a hosts file cannot match a name it does
+    /// not list, so regions beyond these are not covered.
+    /// </summary>
+    public static readonly string[] SecOps =
+    [
+        "malachiteingestion-pa.googleapis.com",
+        "europe-malachiteingestion-pa.googleapis.com",
+        "europe-west2-malachiteingestion-pa.googleapis.com",
+        "asia-northeast1-malachiteingestion-pa.googleapis.com",
+        "southamerica-east1-malachiteingestion-pa.googleapis.com"
+    ];
+
     /// <summary>Every domain the catalog knows about — used by the per-app containment engine.</summary>
     public static IEnumerable<string> All() =>
         ChromeTelemetry.Concat(Beacons).Concat(CrashReporting).Concat(Analytics)

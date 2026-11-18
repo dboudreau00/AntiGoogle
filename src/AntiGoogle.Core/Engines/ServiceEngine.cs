@@ -169,6 +169,54 @@ public class ServiceEngine : IRevertEngine
         catch { return null; }
     }
 
+    /// <summary>The program a service runs, and whether that program is a host shared with other services.</summary>
+    public sealed record ServiceImage(string? ExecutablePath, bool SharedHost);
+
+    /// <summary>
+    /// Where the service's binary lives. Local-only mode confines a PROGRAM, so a service that runs
+    /// in its own process is confined by path, and one that lives inside svchost.exe has to be
+    /// confined by service name instead: jailing svchost itself would cut off half of Windows.
+    /// </summary>
+    public virtual ServiceImage ResolveImage(string name)
+    {
+        try
+        {
+            using var svc = Registry.LocalMachine.OpenSubKey($@"{ServicesKey}\{name}");
+            var raw = svc?.GetValue("ImagePath", null, RegistryValueOptions.DoNotExpandEnvironmentNames) as string;
+            var exe = ParseImagePath(raw is null ? null : Environment.ExpandEnvironmentVariables(raw));
+            var shared = exe is not null &&
+                         string.Equals(Path.GetFileName(exe), "svchost.exe", StringComparison.OrdinalIgnoreCase);
+            return new ServiceImage(exe, shared);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Could not read the image of service {name}: {ex.Message}");
+            return new ServiceImage(null, false);
+        }
+    }
+
+    /// <summary>
+    /// Pulls the executable out of an ImagePath, which may be quoted, unquoted with spaces, carry
+    /// arguments, or start with the \??\ prefix. Null when there is no confident answer.
+    /// </summary>
+    internal static string? ParseImagePath(string? imagePath)
+    {
+        if (string.IsNullOrWhiteSpace(imagePath)) return null;
+        var s = imagePath.Trim();
+        if (s.StartsWith(@"\??\", StringComparison.Ordinal)) s = s[4..];
+
+        if (s.StartsWith('"'))
+        {
+            var close = s.IndexOf('"', 1);
+            return close > 1 ? s[1..close] : null;
+        }
+
+        // Unquoted: the path may contain spaces, then arguments. Take everything up to the first
+        // ".exe", the only reading that does not guess.
+        var idx = s.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+        return idx > 0 ? s[..(idx + 4)] : null;
+    }
+
     private static async Task<bool> IsRunningAsync(string name, CancellationToken ct)
     {
         try

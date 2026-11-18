@@ -700,6 +700,158 @@ public static class RuleCatalog
             ]
         });
 
-        return rules;
+        // ------------------------------------------------------------------
+        // MARKERS — network indicators for Google trackers and Google-owned security vendors.
+        // ------------------------------------------------------------------
+
+        rules.Add(new BlockRule
+        {
+            Id = "hosts.google-measurement-extra",
+            Title = "Google tracking and measurement (extended)",
+            Summary = "Firebase Analytics, ad-serving and conversion hosts, client metrics, ad traffic quality.",
+            Category = RuleCategory.AdsAnalytics,
+            Tier = RiskTier.Balanced,
+            Engine = EngineKind.Hosts,
+            Vendor = "Google",
+            Domains = GoogleEndpoints.MeasurementExtended,
+            DefaultEnabled = true,
+            Note = "Beyond the Analytics and ad rules. Each name appears in at least one of two public blocklists. " +
+                   "Consoles such as Google Ads and AdMob are not included: they are services, not trackers.",
+            Breaks =
+            [
+                Breakage.Minor("Usage reports from apps built on Firebase Analytics",
+                    "Apps that report through Firebase lose that report. The app itself keeps working."),
+                Breakage.Minor("Sites that insist their ad scripts load",
+                    "A few sites notice the blocked requests and show an ad blocker notice before the content.")
+            ]
+        });
+
+        rules.Add(new BlockRule
+        {
+            Id = "hosts.mandiant-tracking",
+            Title = "Mandiant marketing trackers",
+            Summary = "Blocks the web-form and marketing hosts Mandiant pages load.",
+            Category = RuleCategory.GoogleOwned,
+            Tier = RiskTier.Balanced,
+            Engine = EngineKind.Hosts,
+            Vendor = Markers.MarkerCatalog.Mandiant,
+            Domains = GoogleEndpoints.MandiantTracking,
+            DefaultEnabled = true,
+            Note = "Mandiant is part of Google Cloud. Both hosts are flagged as trackers by the AdGuard DNS filter.",
+            Breaks =
+            [
+                Breakage.Minor("Forms and download gates on Mandiant pages",
+                    "Report downloads and registration forms on Mandiant's site may not load or submit.")
+            ]
+        });
+
+        rules.Add(new BlockRule
+        {
+            Id = AgentSensitiveRuleIds[0],
+            Title = "Mandiant portal, API and website",
+            Summary = "Blocks mandiant.com, Mandiant Advantage and the threat intelligence API.",
+            Category = RuleCategory.GoogleOwned,
+            Tier = RiskTier.Aggressive,
+            Engine = EngineKind.Hosts,
+            Vendor = Markers.MarkerCatalog.Mandiant,
+            Domains = GoogleEndpoints.MandiantServices,
+            DefaultEnabled = false,
+            Note = "A service rather than a tracker, so it is off by default. Refused automatically while a Mandiant, " +
+                   "FireEye or Trellix endpoint agent is installed. The two Advantage hostnames come from third-party " +
+                   "integration documentation, not a Mandiant network requirements page.",
+            Breaks =
+            [
+                Breakage.Notable("Mandiant Advantage and the Mandiant website",
+                    "The portal, the threat intelligence API and the main site stop loading. SIEM and SOAR connectors that query the Mandiant API fail.")
+            ]
+        });
+
+        rules.Add(new BlockRule
+        {
+            Id = "hosts.virustotal",
+            Title = "VirusTotal",
+            Summary = "Blocks virustotal.com. VirusTotal is owned by Google.",
+            Category = RuleCategory.GoogleOwned,
+            Tier = RiskTier.Aggressive,
+            Engine = EngineKind.Hosts,
+            Vendor = "VirusTotal (Google)",
+            Domains = GoogleEndpoints.VirusTotal,
+            DefaultEnabled = false,
+            Note = "Off by default. If you do malware analysis, leave it off.",
+            Breaks =
+            [
+                Breakage.Severe("VirusTotal lookups and uploads",
+                    "Browser extensions, analysis tools and SIEM integrations that query VirusTotal fail, including hash lookups and file scans. If you analyse malware, you will notice this immediately.")
+            ]
+        });
+
+        rules.Add(new BlockRule
+        {
+            Id = "hosts.google-secops",
+            Title = "Google SecOps ingestion hosts",
+            Summary = "Blocks the legacy Chronicle ingestion endpoints.",
+            Category = RuleCategory.GoogleOwned,
+            Tier = RiskTier.Aggressive,
+            Engine = EngineKind.Hosts,
+            Vendor = "Google SecOps",
+            Domains = GoogleEndpoints.SecOps,
+            DefaultEnabled = false,
+            Note = "The hosts file cannot match a regional name it does not list, so this covers the US, Europe, London, Tokyo and Sao Paulo hosts only.",
+            Breaks =
+            [
+                Breakage.Notable("Log forwarding to Google SecOps",
+                    "Forwarders and agents that send logs to Chronicle through the legacy ingestion API stop delivering. Logs queue or are dropped depending on the forwarder.")
+            ]
+        });
+
+        return WithLocalOnlyOptions(rules);
+    }
+
+    /// <summary>Rules that are refused while an endpoint security agent from the same vendor is installed.</summary>
+    public static readonly IReadOnlyList<string> AgentSensitiveRuleIds = ["hosts.mandiant-services"];
+
+    /// <summary>
+    /// Which rules can keep their target alive but confined to this machine, and what that costs. Added
+    /// here, in one place, rather than threaded through every rule above, so the whole list can be read
+    /// and challenged at once.
+    /// </summary>
+    private static List<BlockRule> WithLocalOnlyOptions(List<BlockRule> rules)
+    {
+        static Breakage RefusedNotFailed() => Breakage.Notable("Programs may retry faster",
+            "The names resolve to this machine and the connection is refused, instead of the lookup failing. Some programs retry a refused connection much faster than a failed lookup, which can show up as background CPU use or log noise. Nothing leaves the machine either way.");
+
+        var hostsOptions = new[]
+        {
+            "hosts.chrome-telemetry", "hosts.crash", "hosts.update-delivery", "hosts.api-frontdoors",
+            "hosts.push", "hosts.play", "hosts.cast", "hosts.google-measurement-extra"
+        };
+
+        var map = new Dictionary<string, Func<BlockRule, IReadOnlyList<Breakage>>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var id in hostsOptions)
+            map[id] = r => [.. r.Breaks, RefusedNotFailed()];
+
+        map["svc.google-updater"] = _ =>
+        [
+            Breakage.Severe("Chrome security updates",
+                "The updater keeps running but can reach nothing off this machine, so it never finds or downloads a patch and Chrome is not updated. Nothing reports the updater as stopped, so it is easy to forget that updates are off. Update Chrome by hand, or accept the risk knowingly."),
+            Breakage.Notable("The updater keeps retrying",
+                "It is allowed to run and every attempt is refused, so expect log noise and a little background activity from a service that can never succeed.")
+        ];
+
+        map["task.google-updater"] = _ =>
+        [
+            Breakage.Severe("Chrome security updates",
+                "The scheduled fallback still fires on its usual schedule but can reach nothing off this machine, so no patch is ever found. Chrome is not updated, and nothing reports that updates are off."),
+            Breakage.Notable("The updater keeps retrying",
+                "Each scheduled run is attempted and refused, so expect a small, regular burst of failed activity in the task history.")
+        ];
+
+        map["svc.chrome-elevation"] = _ =>
+        [
+            Breakage.Minor("The elevation service cannot be reached from the network",
+                "It never needed to be. It keeps doing its local work for Chrome, so this is the gentler choice for it. Nothing you use is lost.")
+        ];
+
+        return rules.Select(r => map.TryGetValue(r.Id, out var costs) ? r.WithLocalOnly(costs(r)) : r).ToList();
     }
 }

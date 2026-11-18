@@ -12,6 +12,7 @@
 // You should have received a copy of the GNU General Public License along with this program.
 // If not, see <https://www.gnu.org/licenses/>.
 
+using System.Net;
 using System.Net.NetworkInformation;
 using AntiGoogle.Core.Catalog;
 using AntiGoogle.Core.Model;
@@ -245,6 +246,53 @@ public static class Preflight
         }
 
         return names;
+    }
+
+    /// <summary>
+    /// TCP ports 80 and 443 that something on this machine is listening on, reachable through loopback
+    /// (bound to 127.0.0.1, ::1 or every address). Null when the listener table cannot be read.
+    /// A name mapped to loopback is delivered to whatever listens there, so the answer decides whether
+    /// local-only hosts rules may resolve to this machine or must be sinkholed instead.
+    /// </summary>
+    public static IReadOnlyList<int>? LoopbackWebListeners()
+    {
+        try
+        {
+            return IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners()
+                .Where(e => e.Port is 80 or 443 &&
+                            (IPAddress.IsLoopback(e.Address) || e.Address.Equals(IPAddress.Any) || e.Address.Equals(IPAddress.IPv6Any)))
+                .Select(e => e.Port)
+                .Distinct()
+                .OrderBy(p => p)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Could not read the listener table: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// A Mandiant, FireEye or Trellix endpoint agent is a security product. While one is installed the
+    /// Mandiant network rules are refused: quietly cutting a security agent off from its cloud is not
+    /// de-Googling, and on a managed machine it is tampering.
+    /// </summary>
+    public static PreflightFinding? SecurityAgentFinding(
+        IEnumerable<Markers.MarkerFinding> findings, IReadOnlyList<string> vendorRuleIds)
+    {
+        var present = findings
+            .Where(f => f.Exists && f.Definition.Class == Markers.MarkerClass.SecurityAgent && f.Definition.Confidence != Markers.Confidence.Low)
+            .Select(f => f.Definition.Title)
+            .Distinct()
+            .ToList();
+        if (present.Count == 0 || vendorRuleIds.Count == 0) return null;
+
+        return PreflightFinding.Block(
+            "An endpoint security agent is installed",
+            $"Found: {string.Join(", ", present)}. This is a security product, usually installed by an employer. " +
+            "Anti-Google does not stop it, remove it or cut it off from its servers, so the Mandiant network rules are refused.",
+            [.. vendorRuleIds]);
     }
 
     private static void CheckDomainJoin(List<PreflightFinding> findings)

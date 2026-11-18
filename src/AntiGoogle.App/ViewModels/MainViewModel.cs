@@ -14,11 +14,13 @@
 
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using AntiGoogle.Core;
 using AntiGoogle.Core.Catalog;
 using AntiGoogle.Core.Discovery;
 using AntiGoogle.Core.Journal;
+using AntiGoogle.Core.Markers;
 using AntiGoogle.Core.Model;
 using AntiGoogle.Core.Platform;
 using AntiGoogle.Core.Safety;
@@ -53,11 +55,18 @@ public partial class MainViewModel : ObservableObject
         IsElevated = Elevation.IsElevated;
 
         AllRules = RuleCatalog.All
-            .Select(r => new RuleViewModel(r, _settings.EnabledRuleIds.Contains(r.Id, StringComparer.OrdinalIgnoreCase)))
+            .Select(r => new RuleViewModel(r,
+                _settings.EnabledRuleIds.Contains(r.Id, StringComparer.OrdinalIgnoreCase),
+                _settings.LocalOnlyRuleIds.Contains(r.Id, StringComparer.OrdinalIgnoreCase)))
             .ToList();
 
         foreach (var vm in AllRules)
+        {
             vm.EnabledChangedByUser += OnRuleToggled;
+            vm.LocalOnlyChangedByUser += OnRuleLocalOnlyToggled;
+        }
+
+        MarkerRules = AllRules.Where(r => MarkerRuleIds.Contains(r.Id, StringComparer.OrdinalIgnoreCase)).ToList();
 
         RuleGroups = new ObservableCollection<RuleGroupViewModel>(
             AllRules.GroupBy(r => r.Rule.Category)
@@ -74,6 +83,16 @@ public partial class MainViewModel : ObservableObject
     public bool HasInitError => !string.IsNullOrEmpty(InitError);
 
     public List<RuleViewModel> AllRules { get; }
+
+    /// <summary>The network marker rules, shown on the Markers page as well as under their own categories.</summary>
+    public List<RuleViewModel> MarkerRules { get; }
+
+    private static readonly string[] MarkerRuleIds =
+    [
+        "hosts.google-measurement-extra", "hosts.mandiant-tracking", "hosts.mandiant-services", "hosts.virustotal", "hosts.google-secops"
+    ];
+
+    public ObservableCollection<MarkerGroupViewModel> MarkerGroups { get; } = [];
     public ObservableCollection<RuleGroupViewModel> RuleGroups { get; }
     public ObservableCollection<DegradationRow> Degradations { get; } = [];
     public ObservableCollection<PreflightFinding> Findings { get; } = [];
@@ -94,6 +113,12 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private int _disabledServices;
     [ObservableProperty] private int _registryValues;
     [ObservableProperty] private int _journalCount;
+    [ObservableProperty] private int _loopbackDomains;
+    [ObservableProperty] private int _localOnlyJails;
+    [ObservableProperty] private int _quarantinedItems;
+
+    [ObservableProperty] private bool _hasScannedMarkers;
+    [ObservableProperty] private string _markerSummary = "";
 
     [ObservableProperty] private int _severeCount;
     [ObservableProperty] private int _notableCount;
@@ -109,7 +134,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _hasScanned;
 
     /// <summary>Contained apps count as armed — they are changes the next Apply will make.</summary>
-    public bool NothingArmed => EnabledRuleCount == 0 && _settings.ContainedApps.Count == 0;
+    public bool NothingArmed => EnabledRuleCount == 0 && _settings.ContainedApps.Count == 0
+                                && _settings.LocalOnlyApps.Count == 0 && _settings.QuarantineMarkerIds.Count == 0;
 
     public bool HasPlanPreview => PlannedChanges.Count > 0;
 
@@ -180,6 +206,22 @@ public partial class MainViewModel : ObservableObject
         }
 
         PersistRuleState(vm, enabled);
+    }
+
+    private void OnRuleLocalOnlyToggled(RuleViewModel vm, bool localOnly)
+    {
+        if (localOnly)
+        {
+            if (!_settings.LocalOnlyRuleIds.Contains(vm.Id, StringComparer.OrdinalIgnoreCase))
+                _settings.LocalOnlyRuleIds.Add(vm.Id);
+        }
+        else
+        {
+            _settings.LocalOnlyRuleIds.RemoveAll(id => string.Equals(id, vm.Id, StringComparison.OrdinalIgnoreCase));
+        }
+
+        _settings.Save();
+        RecomputeDegradations();
     }
 
     private void PersistRuleState(RuleViewModel vm, bool enabled)
@@ -307,13 +349,21 @@ public partial class MainViewModel : ObservableObject
         var enabled = AllRules.Where(r => r.IsEnabled).ToList();
         EnabledRuleCount = enabled.Count;
 
-        var sources = enabled.Select(r => r.Rule).ToList();
+        var sources = enabled.Select(r => r.Rule.ForMode(r.Mode)).ToList();
 
         // Contained apps are chosen at runtime and have no catalog entry, so without this they
         // contributed NOTHING to the dashboard counts or the impact list — including a Severe
         // breakage. The same synthetic rule the plan uses, so the two can never disagree.
-        if (_settings.ContainedApps.Count > 0)
-            sources.Add(ProtectionService.ContainmentWarningRule(_settings.ContainedApps));
+        var contained = _settings.ContainedApps.Where(a => !_settings.LocalOnlyApps.Contains(a, StringComparer.OrdinalIgnoreCase)).ToList();
+        if (contained.Count > 0)
+            sources.Add(ProtectionService.ContainmentWarningRule(contained));
+        if (_settings.LocalOnlyApps.Count > 0)
+            sources.Add(ProtectionService.LocalOnlyWarningRule(_settings.LocalOnlyApps));
+
+        var chosenMarkers = _settings.QuarantineMarkerIds
+            .Select(MarkerCatalog.ById).OfType<MarkerDefinition>().Where(QuarantineEngine.IsQuarantinable).ToList();
+        if (chosenMarkers.Count > 0)
+            sources.Add(ProtectionService.MarkerWarningRule(chosenMarkers));
 
         var rows = sources
             .SelectMany(r => r.Breaks.Select(b => new DegradationRow(b, r)))
@@ -371,12 +421,15 @@ public partial class MainViewModel : ObservableObject
             DisabledServices = s.DisabledServices;
             RegistryValues = s.RegistryValues;
             JournalCount = s.JournalEntries;
+            LoopbackDomains = s.LoopbackDomains;
+            LocalOnlyJails = s.LocalOnlyJails;
+            QuarantinedItems = s.QuarantinedItems;
             IsArmed = s.AnyProtection;
             IsElevated = s.Elevated;
 
             StatusHeadline = s.AnyProtection ? "Protection active" : "Not protected";
             StatusDetail = s.AnyProtection
-                ? $"{s.SinkholedDomains} domains sinkholed · {s.FirewallRules} firewall rules · {s.JournalEntries} reversible changes"
+                ? $"{s.SinkholedDomains} domains sinkholed · {s.LoopbackDomains} looped to this machine · {s.FirewallRules} firewall rules · {s.JournalEntries} reversible changes"
                 : "No Anti-Google changes are currently applied to this machine.";
 
             JournalEntries.Clear();
@@ -392,6 +445,15 @@ public partial class MainViewModel : ObservableObject
 
     // ---------------------------------------------------------------- preview & apply
 
+    private PlanRequest CurrentRequest() => new()
+    {
+        EnabledRuleIds = _settings.EnabledRuleIds.ToList(),
+        ContainedApps = _settings.ContainedApps.ToList(),
+        LocalOnlyRuleIds = _settings.LocalOnlyRuleIds.ToList(),
+        LocalOnlyApps = _settings.LocalOnlyApps.ToList(),
+        QuarantineMarkerIds = _settings.QuarantineMarkerIds.ToList()
+    };
+
     [RelayCommand]
     private async Task PreviewAsync()
     {
@@ -399,8 +461,7 @@ public partial class MainViewModel : ObservableObject
 
         await RunBusyAsync("Building a change plan…", async () =>
         {
-            var plan = await _service.BuildPlanAsync(
-                _settings.EnabledRuleIds, _settings.ContainedApps).ConfigureAwait(true);
+            var plan = await _service.BuildPlanAsync(CurrentRequest()).ConfigureAwait(true);
 
             _pendingPlan = plan;
 
@@ -428,16 +489,15 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        if (EnabledRuleCount == 0)
+        if (NothingArmed && JournalCount == 0)
         {
-            SetResult("No rules are armed — there is nothing to apply.", "warn");
+            SetResult("Nothing is armed, so there is nothing to apply.", "warn");
             return;
         }
 
         await RunBusyAsync("Building a change plan…", async () =>
         {
-            var plan = await _service.BuildPlanAsync(
-                _settings.EnabledRuleIds, _settings.ContainedApps).ConfigureAwait(true);
+            var plan = await _service.BuildPlanAsync(CurrentRequest()).ConfigureAwait(true);
             _pendingPlan = plan;
 
             Findings.Clear();
@@ -540,17 +600,45 @@ public partial class MainViewModel : ObservableObject
             var found = await _scanner.ScanAsync(progress).ConfigureAwait(true);
 
             DiscoveredApps.Clear();
-            foreach (var app in found)
+
+            // A program chosen earlier stays in the list even when this scan does not find it, so it can still be changed.
+            var everything = found.ToList();
+            foreach (var path in _settings.ContainedApps.Concat(_settings.LocalOnlyApps).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (everything.Any(a => string.Equals(a.ExecutablePath, path, StringComparison.OrdinalIgnoreCase))) continue;
+                everything.Add(new DiscoveredApp(Path.GetFileName(path), path, AppOrigin.Chosen,
+                    "Chosen earlier. This scan did not find it again.", null, File.Exists(path) ? new FileInfo(path).Length : 0));
+            }
+
+            foreach (var app in everything)
             {
                 var vm = new ContainedAppViewModel(app,
-                    _settings.ContainedApps.Contains(app.ExecutablePath, StringComparer.OrdinalIgnoreCase));
+                    _settings.ContainedApps.Contains(app.ExecutablePath, StringComparer.OrdinalIgnoreCase),
+                    _settings.LocalOnlyApps.Contains(app.ExecutablePath, StringComparer.OrdinalIgnoreCase));
                 vm.ContainmentChanged += OnContainmentChanged;
+                vm.LocalOnlyChanged += OnLocalOnlyAppChanged;
                 DiscoveredApps.Add(vm);
             }
 
             HasScanned = true;
             SetResult($"Found {found.Count} binaries that embed or derive from Chromium.", "info");
         }).ConfigureAwait(true);
+    }
+
+    private void OnLocalOnlyAppChanged(ContainedAppViewModel vm, bool localOnly)
+    {
+        if (localOnly)
+        {
+            if (!_settings.LocalOnlyApps.Contains(vm.Path, StringComparer.OrdinalIgnoreCase))
+                _settings.LocalOnlyApps.Add(vm.Path);
+        }
+        else
+        {
+            _settings.LocalOnlyApps.RemoveAll(p => string.Equals(p, vm.Path, StringComparison.OrdinalIgnoreCase));
+        }
+
+        _settings.Save();
+        RecomputeDegradations();
     }
 
     private void OnContainmentChanged(ContainedAppViewModel vm, bool contained)
@@ -568,6 +656,57 @@ public partial class MainViewModel : ObservableObject
         _settings.Save();
         // Containing an app changes what will break, so the impact report and the dashboard
         // counts have to move with it.
+        RecomputeDegradations();
+    }
+
+    // ---------------------------------------------------------------- markers
+
+    [RelayCommand]
+    private async Task ScanMarkersAsync()
+    {
+        await RunBusyAsync("Looking for markers…", async () =>
+        {
+            var findings = await new MarkerScanner().ScanAsync().ConfigureAwait(true);
+
+            MarkerGroups.Clear();
+            foreach (var group in MarkerCatalog.All.GroupBy(m => m.Vendor))
+            {
+                var vms = new List<MarkerViewModel>();
+                foreach (var def in group)
+                {
+                    var found = findings.Where(f => f.Definition.Id == def.Id && f.Exists).ToList();
+                    var chosen = _settings.QuarantineMarkerIds.Contains(def.Id, StringComparer.OrdinalIgnoreCase);
+                    if (found.Count == 0 && !chosen) continue;
+
+                    var vm = new MarkerViewModel(def, found, chosen);
+                    vm.QuarantineChanged += OnMarkerQuarantineChanged;
+                    vms.Add(vm);
+                }
+                if (vms.Count > 0) MarkerGroups.Add(new MarkerGroupViewModel(group.Key, vms));
+            }
+
+            HasScannedMarkers = true;
+            var present = MarkerGroups.Sum(g => g.Markers.Count(m => m.HasFindings));
+            MarkerSummary = present == 0
+                ? $"None of the {MarkerCatalog.All.Count} known marker definitions is on this machine."
+                : $"{present} of {MarkerCatalog.All.Count} known marker definitions {(present == 1 ? "is" : "are")} on this machine.";
+            SetResult(MarkerSummary, "info");
+        }).ConfigureAwait(true);
+    }
+
+    private void OnMarkerQuarantineChanged(MarkerViewModel vm, bool quarantine)
+    {
+        if (quarantine)
+        {
+            if (!_settings.QuarantineMarkerIds.Contains(vm.Id, StringComparer.OrdinalIgnoreCase))
+                _settings.QuarantineMarkerIds.Add(vm.Id);
+        }
+        else
+        {
+            _settings.QuarantineMarkerIds.RemoveAll(id => string.Equals(id, vm.Id, StringComparison.OrdinalIgnoreCase));
+        }
+
+        _settings.Save();
         RecomputeDegradations();
     }
 
@@ -633,6 +772,7 @@ public partial class MainViewModel : ObservableObject
         RuleCategory.Sync => "Sync",
         RuleCategory.Search => "Search",
         RuleCategory.WindowsIntegration => "Windows & DNS",
+        RuleCategory.GoogleOwned => "Google-owned services",
         _ => "Containment"
     };
 }

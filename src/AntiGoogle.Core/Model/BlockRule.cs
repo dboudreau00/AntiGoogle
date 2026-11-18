@@ -63,6 +63,58 @@ public sealed class BlockRule
     /// </summary>
     public bool RequiresExplicitConsent { get; init; }
 
+    /// <summary>
+    /// Who the rule is aimed at, for grouping and for the report: "Google", "Mandiant", "VirusTotal"…
+    /// Null for the general rules that predate marker families.
+    /// </summary>
+    public string? Vendor { get; init; }
+
+    /// <summary>
+    /// True when keeping the target alive but confined to this machine is a meaningful alternative to
+    /// blocking it: a service, a scheduled task, or a hosts group that some local program still needs
+    /// to be able to resolve.
+    /// </summary>
+    public bool SupportsLocalOnly { get; init; }
+
+    /// <summary>
+    /// What degrades when the rule runs in <see cref="RuleMode.LocalOnly"/>. The cost is different from
+    /// blocking — the program keeps running, but cannot reach anything off this machine. Required
+    /// whenever <see cref="SupportsLocalOnly"/> is set (a test enforces it); it is never silently
+    /// borrowed from <see cref="Breaks"/>, because that would state the wrong cost.
+    /// </summary>
+    public IReadOnlyList<Breakage> LocalOnlyBreaks { get; init; } = [];
+
+    /// <summary>A copy of this rule that can also run local-only, with its own declared cost.</summary>
+    public BlockRule WithLocalOnly(IReadOnlyList<Breakage> localOnlyBreaks) => new()
+    {
+        Id = Id, Title = Title, Summary = Summary, Category = Category, Tier = Tier, Engine = Engine,
+        Domains = Domains, IpRanges = IpRanges, ServiceNamePatterns = ServiceNamePatterns,
+        ScheduledTaskPatterns = ScheduledTaskPatterns, RegistryValues = RegistryValues,
+        Breaks = Breaks, DefaultEnabled = DefaultEnabled, Note = Note,
+        RequiresExplicitConsent = RequiresExplicitConsent, Vendor = Vendor,
+        SupportsLocalOnly = true, LocalOnlyBreaks = localOnlyBreaks
+    };
+
+    /// <summary>The breakage list that applies in the given mode.</summary>
+    public IReadOnlyList<Breakage> BreaksFor(RuleMode mode) =>
+        mode == RuleMode.LocalOnly && SupportsLocalOnly ? LocalOnlyBreaks : Breaks;
+
+    /// <summary>
+    /// The rule as it behaves in the given mode. In local-only mode its declared cost is the local-only
+    /// cost, so the impact report, the dashboard counts and the confirmation all state the right thing.
+    /// </summary>
+    public BlockRule ForMode(RuleMode mode) => mode == RuleMode.LocalOnly && SupportsLocalOnly
+        ? new BlockRule
+        {
+            Id = Id, Title = Title, Summary = Summary, Category = Category, Tier = Tier, Engine = Engine,
+            Domains = Domains, IpRanges = IpRanges, ServiceNamePatterns = ServiceNamePatterns,
+            ScheduledTaskPatterns = ScheduledTaskPatterns, RegistryValues = RegistryValues,
+            Breaks = LocalOnlyBreaks, DefaultEnabled = DefaultEnabled, Note = Note,
+            RequiresExplicitConsent = RequiresExplicitConsent, Vendor = Vendor,
+            SupportsLocalOnly = true, LocalOnlyBreaks = LocalOnlyBreaks
+        }
+        : this;
+
     public BreakageSeverity WorstBreakage =>
         Breaks.Count == 0 ? BreakageSeverity.None : Breaks.Max(b => b.Severity);
 

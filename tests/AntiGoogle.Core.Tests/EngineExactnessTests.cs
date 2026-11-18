@@ -69,6 +69,31 @@ public class EngineExactnessTests : IDisposable
         Assert.Equal(expected, ServiceEngine.StartWord(startType, delayed));
     }
 
+    [Theory]
+    [InlineData(@"""C:\Program Files (x86)\Google\Update\GoogleUpdate.exe"" /svc", @"C:\Program Files (x86)\Google\Update\GoogleUpdate.exe")]
+    [InlineData(@"C:\Program Files\Google\Chrome\Application\elevation_service.exe", @"C:\Program Files\Google\Chrome\Application\elevation_service.exe")]
+    [InlineData(@"C:\Program Files (x86)\Some Vendor\svc.exe -flag value", @"C:\Program Files (x86)\Some Vendor\svc.exe")]
+    [InlineData(@"\??\C:\Vendor\svc.exe", @"C:\Vendor\svc.exe")]
+    [InlineData(@"C:\Windows\System32\svchost.exe -k netsvcs -p", @"C:\Windows\System32\svchost.exe")]
+    public void AServiceImagePathYieldsTheProgramAndNothingElse(string imagePath, string expected)
+    {
+        Assert.Equal(expected, ServiceEngine.ParseImagePath(imagePath));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(@"""unterminated quote.exe")]
+    [InlineData(@"C:\Vendor\no-extension-here")]
+    public void AnImagePathThatCannotBeReadConfidentlyYieldsNull(string imagePath)
+    {
+        // Fail closed: a path that cannot be read is a path that is not confined.
+        Assert.Null(ServiceEngine.ParseImagePath(imagePath));
+    }
+
+    [Fact]
+    public void AMissingImagePathYieldsNull() => Assert.Null(ServiceEngine.ParseImagePath(null));
+
     // ------------------------------------------------------------------ registry: created parents
 
     private static BlockRule RegRule(params RegistryPolicy[] p) => new()

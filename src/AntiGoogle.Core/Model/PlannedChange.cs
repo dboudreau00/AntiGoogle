@@ -34,6 +34,20 @@ public sealed class PlannedChange
     /// <summary>Set when a preflight check refuses the change; explains why to the user.</summary>
     public string? RefusalReason { get; set; }
 
+    /// <summary>
+    /// True for a change that takes back something an earlier apply did, because the rule that caused it
+    /// is no longer armed or now runs in a different mode. Shown in the preview like any other change.
+    /// </summary>
+    public bool IsUndo { get; init; }
+
+    /// <summary>For an undo: the journal entry it reverts.</summary>
+    public string? JournalEntryId { get; init; }
+
+    // For local-only changes: what exactly will be confined. Resolved once at planning time.
+    public string? JailProgram { get; init; }
+    public string? JailService { get; init; }
+    public string? JailLabel { get; init; }
+
     public override string ToString() => $"[{Engine}] {Description}";
 }
 
@@ -45,6 +59,12 @@ public sealed class ChangePlan
 
     /// <summary>Preflight findings that must be shown before the user can confirm.</summary>
     public List<Safety.PreflightFinding> Findings { get; } = [];
+
+    /// <summary>Hosts rules that will resolve to this machine instead of being sinkholed.</summary>
+    public HashSet<string> LoopbackRuleIds { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>True when local-only hosts rules were sinkholed instead, because a local service listens on port 80 or 443.</summary>
+    public bool LoopbackDowngraded { get; set; }
 
     public IEnumerable<PlannedChange> Actionable =>
         Changes.Where(c => c.Outcome != ChangeOutcome.NotPresent && c.Outcome != ChangeOutcome.Refused);

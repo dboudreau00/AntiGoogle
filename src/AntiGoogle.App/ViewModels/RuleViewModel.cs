@@ -14,6 +14,7 @@
 
 using System.Collections.ObjectModel;
 using AntiGoogle.Core.Discovery;
+using AntiGoogle.Core.Markers;
 using AntiGoogle.Core.Model;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -22,12 +23,14 @@ namespace AntiGoogle.App.ViewModels;
 public partial class RuleViewModel : ObservableObject
 {
     private bool _suppress;
+    private bool _suppressLocalOnly;
 
-    public RuleViewModel(BlockRule rule, bool enabled)
+    public RuleViewModel(BlockRule rule, bool enabled, bool localOnly = false)
     {
         Rule = rule;
         _isEnabled = enabled;
-        Breaks = new ObservableCollection<Breakage>(rule.Breaks.OrderByDescending(b => b.Severity));
+        _isLocalOnly = rule.SupportsLocalOnly && localOnly;
+        Breaks = new ObservableCollection<Breakage>(CurrentBreaks().OrderByDescending(b => b.Severity));
     }
 
     public BlockRule Rule { get; }
@@ -35,14 +38,24 @@ public partial class RuleViewModel : ObservableObject
 
     [ObservableProperty] private bool _isEnabled;
     [ObservableProperty] private bool _isExpanded;
+    [ObservableProperty] private bool _isLocalOnly;
 
     /// <summary>Raised only for user-driven toggles, never for programmatic corrections.</summary>
     public event Action<RuleViewModel, bool>? EnabledChangedByUser;
+    public event Action<RuleViewModel, bool>? LocalOnlyChangedByUser;
 
     partial void OnIsEnabledChanged(bool value)
     {
         if (_suppress) return;
         EnabledChangedByUser?.Invoke(this, value);
+    }
+
+    partial void OnIsLocalOnlyChanged(bool value)
+    {
+        RefreshBreaks();
+        OnPropertyChanged(nameof(ModeLabel));
+        if (_suppressLocalOnly) return;
+        LocalOnlyChangedByUser?.Invoke(this, value);
     }
 
     /// <summary>Used when the VM has to correct the toggle itself — e.g. the user cancelled a consent prompt.</summary>
@@ -53,16 +66,38 @@ public partial class RuleViewModel : ObservableObject
         _suppress = false;
     }
 
+    public void SetLocalOnlySilently(bool value)
+    {
+        _suppressLocalOnly = true;
+        IsLocalOnly = Rule.SupportsLocalOnly && value;
+        _suppressLocalOnly = false;
+    }
+
+    public RuleMode Mode => IsLocalOnly ? RuleMode.LocalOnly : RuleMode.Block;
+    private IReadOnlyList<Breakage> CurrentBreaks() => Rule.BreaksFor(Mode);
+
+    /// <summary>The cost list is the one for the mode the rule is in, so the card never states the wrong cost.</summary>
+    private void RefreshBreaks()
+    {
+        Breaks.Clear();
+        foreach (var b in CurrentBreaks().OrderByDescending(b => b.Severity)) Breaks.Add(b);
+        OnPropertyChanged(nameof(HasBreaks));
+        OnPropertyChanged(nameof(BreakSummary));
+        OnPropertyChanged(nameof(WorstBreakage));
+    }
+
     public string Id => Rule.Id;
     public string Title => Rule.Title;
     public string Summary => Rule.Summary;
     public string? Note => Rule.Note;
     public RiskTier Tier => Rule.Tier;
     public string TierLabel => Rule.Tier.ToString().ToUpperInvariant();
-    public BreakageSeverity WorstBreakage => Rule.WorstBreakage;
+    public BreakageSeverity WorstBreakage => Breaks.Count == 0 ? BreakageSeverity.None : Breaks.Max(b => b.Severity);
     public bool NeedsConsent => Rule.RequiresExplicitConsent;
     public bool HasBreaks => Breaks.Count > 0;
     public bool HasNote => !string.IsNullOrWhiteSpace(Rule.Note);
+    public bool SupportsLocalOnly => Rule.SupportsLocalOnly;
+    public string ModeLabel => IsLocalOnly ? "LOCAL-ONLY" : "";
 
     public string EngineLabel => Rule.Engine switch
     {
@@ -81,8 +116,10 @@ public partial class RuleViewModel : ObservableObject
     public string ToggleAutomationName =>
         NeedsConsent ? $"Arm rule, requires confirmation: {Title}" : $"Arm rule: {Title}";
 
+    public string LocalOnlyAutomationName => $"Keep running, local-only: {Title}";
+
     /// <summary>
-    /// Without this every one of the 23 disclosure toggles announces the bare string "Show detail",
+    /// Without this every one of the disclosure toggles announces the bare string "Show detail",
     /// so a screen-reader user tabbing the Rules page hears it repeatedly with no idea which rule
     /// each one belongs to.
     /// </summary>
@@ -132,20 +169,34 @@ public sealed class DegradationRow(Breakage breakage, BlockRule rule)
 
 public partial class ContainedAppViewModel : ObservableObject
 {
-    public ContainedAppViewModel(DiscoveredApp app, bool contained)
+    public ContainedAppViewModel(DiscoveredApp app, bool contained, bool localOnly = false)
     {
         App = app;
         _isContained = contained;
+        _isLocalOnly = localOnly;
     }
 
     public DiscoveredApp App { get; }
 
     [ObservableProperty] private bool _isContained;
+    [ObservableProperty] private bool _isLocalOnly;
 
     public event Action<ContainedAppViewModel, bool>? ContainmentChanged;
+    public event Action<ContainedAppViewModel, bool>? LocalOnlyChanged;
+
     partial void OnIsContainedChanged(bool value) => ContainmentChanged?.Invoke(this, value);
 
+    partial void OnIsLocalOnlyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanChangeContainment));
+        LocalOnlyChanged?.Invoke(this, value);
+    }
+
+    /// <summary>Local-only is the stricter of the two, so while it is on the plain containment switch has nothing to add.</summary>
+    public bool CanChangeContainment => !IsLocalOnly;
+
     public string ToggleAutomationName => $"Contain application: {App.Name}";
+    public string LocalOnlyAutomationName => $"Keep running, local-only: {App.Name}";
 
     public string Name => App.Name;
     public string Path => App.ExecutablePath;
@@ -153,4 +204,53 @@ public partial class ContainedAppViewModel : ObservableObject
     public string Evidence => App.Evidence;
     public string Publisher => string.IsNullOrWhiteSpace(App.Publisher) ? "unsigned / unknown publisher" : App.Publisher!;
     public string SizeLabel => $"{App.SizeBytes / 1024.0 / 1024.0:0.#} MB";
+}
+
+/// <summary>One marker found on this machine, with the switch that asks for it to be quarantined.</summary>
+public partial class MarkerViewModel : ObservableObject
+{
+    public MarkerViewModel(MarkerDefinition definition, IReadOnlyList<MarkerFinding> found, bool quarantine)
+    {
+        Definition = definition;
+        Found = found;
+        _isQuarantine = quarantine;
+    }
+
+    public MarkerDefinition Definition { get; }
+    public IReadOnlyList<MarkerFinding> Found { get; }
+
+    [ObservableProperty] private bool _isQuarantine;
+
+    public event Action<MarkerViewModel, bool>? QuarantineChanged;
+    partial void OnIsQuarantineChanged(bool value) => QuarantineChanged?.Invoke(this, value);
+
+    public string Id => Definition.Id;
+    public string Title => Definition.Title;
+    public string Why => Definition.Why;
+    public string ClassLabel => Definition.Class switch
+    {
+        MarkerClass.Identifier => "IDENTIFIER",
+        MarkerClass.Leftover => "LEFTOVER",
+        MarkerClass.OptionalComponent => "OPTIONAL COMPONENT",
+        MarkerClass.Component => "SOFTWARE",
+        _ => "SECURITY AGENT"
+    };
+    public string ConfidenceLabel => Definition.Confidence.ToString().ToUpperInvariant();
+    public bool CanQuarantine => Core.Markers.QuarantineEngine.IsQuarantinable(Definition);
+    public string Handling => CanQuarantine ? "" : "Reported only";
+    public bool HasFindings => Found.Count > 0;
+
+    public string Where => string.Join("\n", Found.Select(f =>
+        string.IsNullOrEmpty(f.SizeLabel) ? f.Location : $"{f.Location}  ({f.SizeLabel})"));
+
+    public string Notes => string.Join("  ", Found.Where(f => !string.IsNullOrEmpty(f.Note)).Select(f => f.Note));
+    public bool HasNotes => Notes.Length > 0;
+
+    public string ToggleAutomationName => $"Quarantine marker: {Definition.Title}";
+}
+
+public sealed class MarkerGroupViewModel(string vendor, IEnumerable<MarkerViewModel> markers)
+{
+    public string Vendor { get; } = vendor;
+    public ObservableCollection<MarkerViewModel> Markers { get; } = new(markers);
 }

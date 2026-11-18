@@ -32,7 +32,10 @@ public enum ReverseKind
     RestoreScheduledTask,
 
     /// <summary>Put a registry value back, or delete it if it did not exist before.</summary>
-    RestoreRegistryValue
+    RestoreRegistryValue,
+
+    /// <summary>Move a quarantined item back to where it came from.</summary>
+    RestoreQuarantine
 }
 
 /// <summary>
@@ -68,6 +71,16 @@ public sealed class JournalEntry
     // --- RestoreScheduledTask ---
     public string? TaskPath { get; set; }
     public bool? TaskWasEnabled { get; set; }
+
+    /// <summary>
+    /// The program a firewall rule is scoped to (containment and local-only), or the original path of a
+    /// quarantined item. Lets a later plan tell which armed target an entry belongs to.
+    /// </summary>
+    public string? Target { get; set; }
+
+    // --- RestoreQuarantine ---
+    /// <summary>Folder name of the item in the quarantine vault. The manifest inside it carries the rest.</summary>
+    public string? QuarantineId { get; set; }
 
     // --- RestoreRegistryValue ---
     public RegistryHive2? RegistryHive { get; set; }

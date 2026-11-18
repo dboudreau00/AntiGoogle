@@ -69,6 +69,96 @@ public sealed class HostsFileEngine : IRevertEngine
         }
     }
 
+    /// <summary>Domains our managed block resolves to this machine (127.0.0.1) — the local-only mode.</summary>
+    public IReadOnlyList<string> CurrentlyLooped()
+    {
+        try
+        {
+            if (!File.Exists(_hostsPath)) return [];
+            var (_, managed, _) = Split(File.ReadAllText(_hostsPath));
+            return managed
+                .Where(l => l.StartsWith(AppPaths.LoopbackV4, StringComparison.Ordinal))
+                .Select(l => l.Split((char[])[' ', '\t'], StringSplitOptions.RemoveEmptyEntries))
+                .Where(p => p.Length >= 2)
+                .Select(p => p[1])
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Could not read managed hosts block: {ex.Message}");
+            return [];
+        }
+    }
+
+    /// <summary>One rule's section of the managed block, read back from the live file.</summary>
+    public sealed record HostsGroup(string RuleId, string Title, bool LocalOnly, IReadOnlyList<string> Domains);
+
+    /// <summary>What the managed block holds right now, read back rather than assumed.</summary>
+    public sealed record HostsAudit(
+        IReadOnlyList<string> Sinkholed, IReadOnlyList<string> Looped,
+        IReadOnlyList<string> Incomplete, IReadOnlyList<HostsGroup> Groups);
+
+    /// <summary>
+    /// Parses the live managed block: which names are sinkholed, which resolve to this machine, and which
+    /// are missing one of the two address families (an IPv4-only entry is routinely defeated by an AAAA
+    /// fallback, which is why every name must be written for both).
+    /// </summary>
+    public HostsAudit Audit()
+    {
+        var sinkholed = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var looped = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var families = new Dictionary<string, (bool V4, bool V6)>(StringComparer.OrdinalIgnoreCase);
+        var groups = new List<(string Id, string Title, bool LocalOnly, List<string> Domains)>();
+
+        try
+        {
+            if (File.Exists(_hostsPath))
+            {
+                var (_, managed, _) = Split(File.ReadAllText(_hostsPath));
+                foreach (var line in managed)
+                {
+                    if (line.StartsWith("# --- ", StringComparison.Ordinal))
+                    {
+                        var header = line[6..];
+                        var localOnly = header.Contains("[local-only", StringComparison.Ordinal);
+                        var bracket = header.IndexOf(" [local-only", StringComparison.Ordinal);
+                        if (bracket >= 0) header = header[..bracket];
+                        var colon = header.IndexOf(": ", StringComparison.Ordinal);
+                        groups.Add(colon > 0
+                            ? (header[..colon], header[(colon + 2)..], localOnly, [])
+                            : (header, header, localOnly, []));
+                        continue;
+                    }
+
+                    if (line.StartsWith('#') || line.Length == 0) continue;
+                    var parts = line.Split((char[])[' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length < 2) continue;
+
+                    var (ip, name) = (parts[0], parts[1]);
+                    var isLoop = ip is AppPaths.LoopbackV4 or AppPaths.LoopbackV6;
+                    var isSink = ip is AppPaths.SinkholeV4 or AppPaths.SinkholeV6;
+                    if (!isLoop && !isSink) continue;
+
+                    (isLoop ? looped : sinkholed).Add(name);
+                    var seen = families.GetValueOrDefault(name);
+                    families[name] = ip.Contains(':') ? (seen.V4, true) : (true, seen.V6);
+                    if (groups.Count > 0 && !groups[^1].Domains.Contains(name, StringComparer.OrdinalIgnoreCase))
+                        groups[^1].Domains.Add(name);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Could not audit the managed hosts block: {ex.Message}");
+        }
+
+        return new HostsAudit(
+            [.. sinkholed], [.. looped],
+            families.Where(kv => !(kv.Value.V4 && kv.Value.V6)).Select(kv => kv.Key).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(),
+            groups.Select(g => new HostsGroup(g.Id, g.Title, g.LocalOnly, g.Domains)).ToList());
+    }
+
     public bool HasManagedBlock()
     {
         try
@@ -83,15 +173,21 @@ public sealed class HostsFileEngine : IRevertEngine
     /// Rewrites the managed block to cover exactly the supplied rules. Called once per apply with
     /// every enabled hosts rule — the block is regenerated wholesale, never appended to.
     /// </summary>
-    public async Task ApplyAsync(IReadOnlyList<BlockRule> hostsRules, ChangeJournal journal, CancellationToken ct = default)
+    /// <param name="loopbackRuleIds">
+    /// Rules in local-only mode. Their names resolve to this machine (127.0.0.1 and ::1) instead of
+    /// being sinkholed. A name that ANY blocking rule also lists stays sinkholed: when two rules
+    /// disagree, the stricter one wins, and the line says so.
+    /// </param>
+    public async Task ApplyAsync(
+        IReadOnlyList<BlockRule> hostsRules, ChangeJournal journal, CancellationToken ct = default,
+        IReadOnlySet<string>? loopbackRuleIds = null)
     {
-        var domains = hostsRules
-            .SelectMany(r => r.Domains)
-            .Where(d => !string.IsNullOrWhiteSpace(d))
-            .Select(d => d.Trim().ToLowerInvariant())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(d => d, StringComparer.Ordinal)
-            .ToList();
+        var loopRules = loopbackRuleIds ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var modes = EffectiveModes(hostsRules, loopRules);
+
+        var domains = modes.Keys.OrderBy(d => d, StringComparer.Ordinal).ToList();
+        var looped = modes.Count(kv => kv.Value);
+        var sinkholed = domains.Count - looped;
 
         var original = File.ReadAllText(_hostsPath);
         var backupPath = WriteBackup(original);
@@ -102,7 +198,9 @@ public sealed class HostsFileEngine : IRevertEngine
         {
             RuleId = string.Join(",", hostsRules.Select(r => r.Id)),
             Engine = EngineKind.Hosts,
-            Description = $"Sinkholed {domains.Count} Google domains in the hosts file",
+            Description = looped == 0
+                ? $"Sinkholed {domains.Count} Google domains in the hosts file"
+                : $"Wrote {domains.Count} Google domains to the hosts file ({sinkholed} sinkholed, {looped} resolved to this machine)",
             Reverse = ReverseKind.RestoreHostsBackup,
             BackupPath = backupPath
         });
@@ -114,19 +212,25 @@ public sealed class HostsFileEngine : IRevertEngine
 
         sb.Append(AppPaths.HostsBeginMarker).Append("\r\n");
         sb.Append($"# Generated {DateTime.Now:yyyy-MM-dd HH:mm:ss} by Anti-Google.\r\n");
-        sb.Append($"# {domains.Count} domains from {hostsRules.Count} rules. Both A and AAAA are sinkholed.\r\n");
+        sb.Append($"# {domains.Count} domains from {hostsRules.Count} rules. Both A and AAAA are covered: sinkholed to " +
+                  $"{AppPaths.SinkholeV4} / {AppPaths.SinkholeV6}, or {AppPaths.LoopbackV4} / {AppPaths.LoopbackV6} for local-only rules.\r\n");
         sb.Append("# Do not hand-edit inside these markers — the block is regenerated on every apply.\r\n");
         sb.Append("# To remove: Anti-Google -> Restore Everything.\r\n");
 
         foreach (var rule in hostsRules.OrderBy(r => r.Id, StringComparer.Ordinal))
         {
-            sb.Append($"#\r\n# --- {rule.Id}: {rule.Title}\r\n");
+            var ruleIsLocalOnly = loopRules.Contains(rule.Id);
+            var tag = ruleIsLocalOnly ? " [local-only: resolves to this machine]" : "";
+            sb.Append($"#\r\n# --- {rule.Id}: {rule.Title}{tag}\r\n");
             foreach (var d in rule.Domains.Select(x => x.Trim().ToLowerInvariant())
+                                          .Where(x => x.Length > 0)
                                           .Distinct(StringComparer.OrdinalIgnoreCase)
                                           .OrderBy(x => x, StringComparer.Ordinal))
             {
-                sb.Append("0.0.0.0 ").Append(d).Append("\r\n");
-                sb.Append(":: ").Append(d).Append("\r\n");
+                var loop = modes[d];
+                var note = ruleIsLocalOnly && !loop ? "  # sinkholed: another armed rule also lists this name" : "";
+                sb.Append(loop ? AppPaths.LoopbackV4 : AppPaths.SinkholeV4).Append(' ').Append(d).Append(note).Append("\r\n");
+                sb.Append(loop ? AppPaths.LoopbackV6 : AppPaths.SinkholeV6).Append(' ').Append(d).Append(note).Append("\r\n");
             }
         }
 
@@ -138,7 +242,25 @@ public sealed class HostsFileEngine : IRevertEngine
         }
 
         await WriteAtomicAsync(sb.ToString(), ct).ConfigureAwait(false);
-        Log.Info($"Hosts: wrote {domains.Count} sinkholed domains ({domains.Count * 2} lines).");
+        Log.Info($"Hosts: wrote {domains.Count} domains ({sinkholed} sinkholed, {looped} looped to this machine; {domains.Count * 2} lines).");
+    }
+
+    /// <summary>
+    /// For every name any rule lists: does it resolve to this machine (true) or nowhere (false)?
+    /// Loopback only when EVERY rule listing the name is local-only. Fail closed: a name one armed
+    /// rule wants blocked is blocked, whatever another rule would have preferred.
+    /// </summary>
+    internal static Dictionary<string, bool> EffectiveModes(
+        IReadOnlyList<BlockRule> hostsRules, IReadOnlySet<string> loopbackRuleIds)
+    {
+        var modes = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        foreach (var rule in hostsRules)
+        {
+            var wantsLoopback = loopbackRuleIds.Contains(rule.Id);
+            foreach (var d in rule.Domains.Select(x => x.Trim().ToLowerInvariant()).Where(x => x.Length > 0))
+                modes[d] = modes.TryGetValue(d, out var already) ? already && wantsLoopback : wantsLoopback;
+        }
+        return modes;
     }
 
     public async Task RevertAsync(JournalEntry entry, CancellationToken ct = default)
