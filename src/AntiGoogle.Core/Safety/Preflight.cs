@@ -185,10 +185,13 @@ public static class Preflight
     {
         try
         {
-            using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Google\Chrome");
+            using var key = Registry.LocalMachine.OpenSubKey(ChromePolicyKey);
             if (key is null) return;
 
-            var existing = key.GetValueNames().Length;
+            // Values this app wrote itself are not "something else". Without this a second preflight,
+            // and every report, would blame an employer for Anti-Google's own policy.
+            var ours = ChromePolicyValuesWrittenByUs();
+            var existing = key.GetValueNames().Count(name => !ours.Contains(name));
             if (existing > 0)
             {
                 findings.Add(PreflightFinding.Warn(
@@ -203,6 +206,45 @@ public static class Preflight
         {
             Log.Warn($"Policy probe failed: {ex.Message}");
         }
+    }
+
+    private const string ChromePolicyKey = @"SOFTWARE\Policies\Google\Chrome";
+
+    /// <summary>
+    /// The Chrome policy value names this app has written, read from the journal without loading it into a
+    /// <see cref="Journal.ChangeJournal"/>: a probe must not preserve or touch a damaged file. An unreadable
+    /// journal yields an empty set, so no value is ever claimed as ours on a guess.
+    /// </summary>
+    internal static HashSet<string> ChromePolicyValuesWrittenByUs(string? journalPath = null)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var path = journalPath ?? AppPaths.JournalFile;
+            if (!File.Exists(path)) return names;
+
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array) return names;
+
+            foreach (var entry in doc.RootElement.EnumerateArray())
+            {
+                if (entry.ValueKind == System.Text.Json.JsonValueKind.Object &&
+                    entry.TryGetProperty("RegistryKey", out var keyName) &&
+                    string.Equals(keyName.GetString(), ChromePolicyKey, StringComparison.OrdinalIgnoreCase) &&
+                    entry.TryGetProperty("RegistryName", out var valueName) &&
+                    valueName.GetString() is { Length: > 0 } name)
+                {
+                    names.Add(name);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Could not read the journal to tell our policy values from others: {ex.Message}");
+            names.Clear();
+        }
+
+        return names;
     }
 
     private static void CheckDomainJoin(List<PreflightFinding> findings)
