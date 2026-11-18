@@ -12,6 +12,7 @@
 // You should have received a copy of the GNU General Public License along with this program.
 // If not, see <https://www.gnu.org/licenses/>.
 
+using System.Buffers.Binary;
 using System.Net;
 using System.Text;
 using AntiGoogle.Core.Catalog;
@@ -190,7 +191,7 @@ public class LocalOnlyEngineTests : IDisposable
         Assert.Equal(IPAddress.Parse("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"), IPAddress.Parse(range[1]));
     }
 
-    private static uint ToUInt(string ip) => BitConverter.ToUInt32(IPAddress.Parse(ip).GetAddressBytes().Reverse().ToArray(), 0);
+    private static uint ToUInt(string ip) => BinaryPrimitives.ReadUInt32BigEndian(IPAddress.Parse(ip).GetAddressBytes());
 
     // ------------------------------------------------------------------ firewall: validation
 
