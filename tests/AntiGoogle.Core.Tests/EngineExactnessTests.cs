@@ -12,6 +12,8 @@
 // You should have received a copy of the GNU General Public License along with this program.
 // If not, see <https://www.gnu.org/licenses/>.
 
+using System.Security.AccessControl;
+using System.Security.Principal;
 using AntiGoogle.Core.Engines;
 using AntiGoogle.Core.Journal;
 using AntiGoogle.Core.Model;
@@ -21,13 +23,15 @@ using Xunit;
 namespace AntiGoogle.Core.Tests;
 
 /// <summary>
-/// Regression tests for the two ways a real Windows 11 round trip found revert to be inexact. Each
+/// Regression tests for the three ways a real Windows 11 round trip found revert to be inexact. Each
 /// of these was measured on a virtual machine by the elevated harness before it was fixed; the unit
 /// tests pin the part of each fix that can be reached without administrator rights.
 /// </summary>
 public class EngineExactnessTests : IDisposable
 {
     private readonly string _dir;
+    private readonly string _hosts;
+    private readonly string _backups;
     private readonly string _journalPath;
     private readonly string _regBase = $@"Software\AntiGoogleTests\{Guid.NewGuid():N}";
 
@@ -35,7 +39,10 @@ public class EngineExactnessTests : IDisposable
     {
         _dir = Path.Combine(Path.GetTempPath(), "antigoogle-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_dir);
+        _hosts = Path.Combine(_dir, "hosts");
+        _backups = Path.Combine(_dir, "backups");
         _journalPath = Path.Combine(_dir, "journal.json");
+        File.WriteAllText(_hosts, "# my own entries\r\n127.0.0.1 localdev.test\r\n");
     }
 
     public void Dispose()
@@ -142,4 +149,57 @@ public class EngineExactnessTests : IDisposable
         using var gone = Registry.CurrentUser.OpenSubKey(leaf);
         Assert.Null(gone);
     }
+
+    // ------------------------------------------------------------------ hosts: owner and ACL
+
+    private static string Sddl(string path) =>
+        new FileInfo(path).GetAccessControl().GetSecurityDescriptorSddlForm(AccessControlSections.Access | AccessControlSections.Owner);
+
+    [Fact]
+    public async Task ApplyAndRevertLeaveTheHostsFilesOwnerAndAccessListUntouched()
+    {
+        // File.Replace swaps in a brand-new file, which has its creator's owner and a default ACL.
+        // Measured on Windows 11: SYSTEM-owned hosts came back owned by Administrators with an extra
+        // explicit ACE. Overwriting the same file keeps all of it.
+        var info = new FileInfo(_hosts);
+        var security = info.GetAccessControl();
+        security.AddAccessRule(new FileSystemAccessRule(
+            new SecurityIdentifier(WellKnownSidType.WorldSid, null), FileSystemRights.ReadAndExecute, AccessControlType.Allow));
+        info.SetAccessControl(security);
+
+        var before = Sddl(_hosts);
+        var created = File.GetCreationTimeUtc(_hosts);
+
+        var engine = new HostsFileEngine(_hosts, _backups);
+        var journal = new ChangeJournal(_journalPath);
+        await engine.ApplyAsync([HostsRule("t1", "alpha.example.invalid")], journal);
+
+        Assert.Equal(before, Sddl(_hosts));
+        Assert.Equal(created, File.GetCreationTimeUtc(_hosts));
+
+        await engine.RevertAsync(journal.Entries.Single());
+
+        Assert.Equal(before, Sddl(_hosts));
+        Assert.Equal(created, File.GetCreationTimeUtc(_hosts));
+    }
+
+    [Fact]
+    public async Task NoStagingFileIsLeftBesideTheHostsFile()
+    {
+        var engine = new HostsFileEngine(_hosts, _backups);
+        await engine.ApplyAsync([HostsRule("t1", "alpha.example.invalid")], new ChangeJournal(_journalPath));
+
+        Assert.Empty(Directory.GetFiles(_dir, "hosts.antigoogle.*.tmp"));
+    }
+
+    private static BlockRule HostsRule(string id, params string[] domains) => new()
+    {
+        Id = id,
+        Title = $"Test rule {id}",
+        Summary = "test",
+        Category = RuleCategory.Telemetry,
+        Tier = RiskTier.Balanced,
+        Engine = EngineKind.Hosts,
+        Domains = domains
+    };
 }

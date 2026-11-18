@@ -176,36 +176,72 @@ public sealed class HostsFileEngine : IRevertEngine
     }
 
     /// <summary>
-    /// Write to a temp file in the same directory, then replace. A half-written hosts file would
-    /// break name resolution machine-wide, so this must never be a partial write.
+    /// Stage the new content in a temp file first (proof the directory is writable and the disk has the
+    /// room), then overwrite the hosts file IN PLACE.
+    ///
+    /// In place, rather than File.Replace, because replacing swaps in a brand-new file, and a brand-new
+    /// file carries its creator's owner and a default ACL: measured on Windows 11, apply followed by
+    /// revert left the hosts file owned by Administrators instead of SYSTEM with an extra explicit ACE,
+    /// which breaks the "revert is exact" promise and is exactly what tamper-detection tools watch for.
+    /// Overwriting the same file object keeps its owner, ACL, attributes and creation time untouched.
+    /// The file is a few kilobytes, written in one call after the staging copy proved it will fit, and
+    /// a timestamped backup of the original is always on disk beside the journal.
+    ///
+    /// Only if the in-place write is refused (another process holds it open for writing, or security
+    /// software has locked it) does this fall back to replacing the file.
     /// </summary>
     private async Task WriteAtomicAsync(string content, CancellationToken ct)
     {
         var dir = Path.GetDirectoryName(_hostsPath)!;
         var tmp = Path.Combine(dir, $"hosts.antigoogle.{Environment.ProcessId}.tmp");
+        var bytes = new UTF8Encoding(false).GetBytes(content);
 
         using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
-        using (var sw = new StreamWriter(fs, new UTF8Encoding(false)))
         {
-            sw.Write(content);
-            sw.Flush();
+            fs.Write(bytes, 0, bytes.Length);
             fs.Flush(flushToDisk: true);
         }
 
         try
         {
-            File.Replace(tmp, _hostsPath, null);
+            if (!TryWriteInPlace(bytes))
+            {
+                try
+                {
+                    File.Replace(tmp, _hostsPath, null);
+                }
+                catch (Exception)
+                {
+                    // File.Replace needs both files on one volume and can trip over security software
+                    // holding a handle. A plain overwrite-copy keeps the destination's ACL because the
+                    // destination already exists.
+                    File.Copy(tmp, _hostsPath, overwrite: true);
+                }
+            }
         }
-        catch (Exception)
+        finally
         {
-            // File.Replace preserves ACLs but needs both files on one volume and can trip over
-            // security software holding a handle. Fall back to a plain copy, which keeps the
-            // original file's ACL because the destination already exists.
-            File.Copy(tmp, _hostsPath, overwrite: true);
-            try { File.Delete(tmp); } catch { /* leftover temp is harmless */ }
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { /* leftover temp is harmless */ }
         }
 
         await FlushDnsCacheAsync(ct).ConfigureAwait(false);
+    }
+
+    private bool TryWriteInPlace(byte[] bytes)
+    {
+        try
+        {
+            using var fs = new FileStream(_hostsPath, FileMode.Open, FileAccess.Write, FileShare.Read);
+            fs.SetLength(0);
+            fs.Write(bytes, 0, bytes.Length);
+            fs.Flush(flushToDisk: true);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warn($"Hosts: in-place write refused ({ex.Message}); falling back to replacing the file.");
+            return false;
+        }
     }
 
     /// <summary>
