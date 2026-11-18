@@ -21,9 +21,9 @@ using Xunit;
 namespace AntiGoogle.Core.Tests;
 
 /// <summary>
-/// Regression tests for a way a real Windows 11 round trip found revert to be inexact. It was
-/// measured on a virtual machine by the elevated harness before it was fixed; the unit tests pin
-/// the part of the fix that can be reached without administrator rights.
+/// Regression tests for the two ways a real Windows 11 round trip found revert to be inexact. Each
+/// of these was measured on a virtual machine by the elevated harness before it was fixed; the unit
+/// tests pin the part of each fix that can be reached without administrator rights.
 /// </summary>
 public class EngineExactnessTests : IDisposable
 {
@@ -43,6 +43,23 @@ public class EngineExactnessTests : IDisposable
         try { Registry.CurrentUser.DeleteSubKeyTree(_regBase, throwOnMissingSubKey: false); } catch { }
         try { Directory.Delete(_dir, recursive: true); } catch { }
         GC.SuppressFinalize(this);
+    }
+
+    // ------------------------------------------------------------------ services: delayed start
+
+    [Theory]
+    [InlineData(2, true, "delayed-auto")]
+    [InlineData(2, false, "auto")]
+    [InlineData(3, false, "demand")]
+    [InlineData(4, false, "disabled")]
+    [InlineData(0, false, "boot")]
+    [InlineData(1, false, "system")]
+    [InlineData(9, false, "demand")]
+    public void RestoringAServiceUsesTheWordThatKeepsItsExactStartType(int startType, bool delayed, string expected)
+    {
+        // `sc config start= auto` clears DelayedAutostart, so a delayed service restored with plain
+        // "auto" came back as a different service. Measured: gupdate, AUTO_START (DELAYED) -> AUTO_START.
+        Assert.Equal(expected, ServiceEngine.StartWord(startType, delayed));
     }
 
     // ------------------------------------------------------------------ registry: created parents

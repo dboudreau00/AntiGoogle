@@ -91,6 +91,7 @@ public class ServiceEngine : IRevertEngine
             Reverse = ReverseKind.RestoreServiceStartType,
             ServiceName = serviceName,
             PreviousStartType = previousStart,
+            PreviousDelayedAutostart = ReadDelayedAutostart(serviceName),
             PreviousServiceRunning = wasRunning
         });
 
@@ -115,13 +116,7 @@ public class ServiceEngine : IRevertEngine
     {
         if (entry.ServiceName is null || entry.PreviousStartType is null) return;
 
-        var startWord = entry.PreviousStartType switch
-        {
-            2 => "auto",
-            3 => "demand",
-            4 => "disabled",
-            _ => "demand"
-        };
+        var startWord = StartWord(entry.PreviousStartType.Value, entry.PreviousDelayedAutostart == true);
 
         var cfg = await ProcessRunner.RunAsync("sc.exe", ["config", entry.ServiceName, "start=", startWord], 30_000, ct)
                                     .ConfigureAwait(false);
@@ -143,6 +138,35 @@ public class ServiceEngine : IRevertEngine
         }
 
         Log.Info($"Service {entry.ServiceName} restored to start={startWord}.");
+    }
+
+    /// <summary>
+    /// The sc.exe word that puts a start type back EXACTLY. "Automatic (Delayed Start)" is Start=2 plus a
+    /// separate DelayedAutostart flag, and `sc config start= auto` clears that flag, so restoring a
+    /// delayed service with plain "auto" silently changes it. Measured on Windows 11: gupdate went from
+    /// AUTO_START (DELAYED) to AUTO_START after a round trip. Boot and system starts (drivers) get their
+    /// own words rather than being flattened to "demand".
+    /// </summary>
+    internal static string StartWord(int startType, bool delayed) => startType switch
+    {
+        0 => "boot",
+        1 => "system",
+        2 => delayed ? "delayed-auto" : "auto",
+        3 => "demand",
+        4 => "disabled",
+        _ => "demand"
+    };
+
+    /// <summary>The DelayedAutostart flag of a service; false when the value is absent, null when unreadable.</summary>
+    public virtual bool? ReadDelayedAutostart(string name)
+    {
+        try
+        {
+            using var svc = Registry.LocalMachine.OpenSubKey($@"{ServicesKey}\{name}");
+            if (svc is null) return null;
+            return svc.GetValue("DelayedAutostart") is int d && d == 1;
+        }
+        catch { return null; }
     }
 
     private static async Task<bool> IsRunningAsync(string name, CancellationToken ct)

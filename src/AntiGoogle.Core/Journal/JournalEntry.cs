@@ -59,6 +59,11 @@ public sealed class JournalEntry
     /// <summary>Win32 service start type: 2=Automatic, 3=Manual, 4=Disabled.</summary>
     public int? PreviousStartType { get; set; }
     public bool? PreviousServiceRunning { get; set; }
+    /// <summary>
+    /// "Automatic (Delayed Start)" is Start=2 plus this separate flag. Without recording it a restore
+    /// turns a delayed service into a plain automatic one.
+    /// </summary>
+    public bool? PreviousDelayedAutostart { get; set; }
 
     // --- RestoreScheduledTask ---
     public string? TaskPath { get; set; }
