@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AntiGoogle.Core.Tests", "te
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AntiGoogle.Verify", "tests\AntiGoogle.Verify\AntiGoogle.Verify.csproj", "{F14E06EE-CFF4-4046-95C3-0C4E8D38190A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AntiGoogle.Elevated", "tests\AntiGoogle.Elevated\AntiGoogle.Elevated.csproj", "{B7D06E78-53A0-4F05-9640-4813DFDC8B4D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -73,6 +75,18 @@ Global
 		{F14E06EE-CFF4-4046-95C3-0C4E8D38190A}.Release|x64.Build.0 = Release|Any CPU
 		{F14E06EE-CFF4-4046-95C3-0C4E8D38190A}.Release|x86.ActiveCfg = Release|Any CPU
 		{F14E06EE-CFF4-4046-95C3-0C4E8D38190A}.Release|x86.Build.0 = Release|Any CPU
+		{B7D06E78-53A0-4F05-9640-4813DFDC8B4D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B7D06E78-53A0-4F05-9640-4813DFDC8B4D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B7D06E78-53A0-4F05-9640-4813DFDC8B4D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B7D06E78-53A0-4F05-9640-4813DFDC8B4D}.Debug|x64.Build.0 = Debug|Any CPU
+		{B7D06E78-53A0-4F05-9640-4813DFDC8B4D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B7D06E78-53A0-4F05-9640-4813DFDC8B4D}.Debug|x86.Build.0 = Debug|Any CPU
+		{B7D06E78-53A0-4F05-9640-4813DFDC8B4D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B7D06E78-53A0-4F05-9640-4813DFDC8B4D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B7D06E78-53A0-4F05-9640-4813DFDC8B4D}.Release|x64.ActiveCfg = Release|Any CPU
+		{B7D06E78-53A0-4F05-9640-4813DFDC8B4D}.Release|x64.Build.0 = Release|Any CPU
+		{B7D06E78-53A0-4F05-9640-4813DFDC8B4D}.Release|x86.ActiveCfg = Release|Any CPU
+		{B7D06E78-53A0-4F05-9640-4813DFDC8B4D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -82,5 +96,6 @@ Global
 		{67D05710-068F-4319-9A07-2288C4E06BFF} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{0E8640A3-B2FC-49B5-B61E-27FAE4E20847} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{F14E06EE-CFF4-4046-95C3-0C4E8D38190A} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{B7D06E78-53A0-4F05-9640-4813DFDC8B4D} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal
