@@ -16,6 +16,7 @@ using System.Collections.ObjectModel;
 using AntiGoogle.Core.Discovery;
 using AntiGoogle.Core.Markers;
 using AntiGoogle.Core.Model;
+using AntiGoogle.Core.Verification;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace AntiGoogle.App.ViewModels;
@@ -253,4 +254,14 @@ public sealed class MarkerGroupViewModel(string vendor, IEnumerable<MarkerViewMo
 {
     public string Vendor { get; } = vendor;
     public ObservableCollection<MarkerViewModel> Markers { get; } = new(markers);
+}
+
+/// <summary>One line of the containment verification: a check, whether it holds, and what was seen.</summary>
+public sealed class VerificationRowViewModel(string target, VerificationCheck check)
+{
+    public string Target { get; } = target;
+    public string Name { get; } = check.Name;
+    public string Detail { get; } = check.Detail;
+    public bool Passed { get; } = check.Passed;
+    public string Verdict => Passed ? "PASS" : "FAIL";
 }

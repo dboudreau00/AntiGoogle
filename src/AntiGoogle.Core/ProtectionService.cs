@@ -20,6 +20,7 @@ using AntiGoogle.Core.Journal;
 using AntiGoogle.Core.Markers;
 using AntiGoogle.Core.Model;
 using AntiGoogle.Core.Platform;
+using AntiGoogle.Core.Reporting;
 using AntiGoogle.Core.Safety;
 
 namespace AntiGoogle.Core;
@@ -86,6 +87,12 @@ public sealed record ProtectionServiceOptions
     public IReadOnlyList<MarkerDefinition>? MarkerCatalog { get; init; }
 
     /// <summary>
+    /// The history log. A service built from options does NOT write one unless this is set, so a test
+    /// never touches the real machine; the parameterless constructor always does.
+    /// </summary>
+    public AuditLog? Audit { get; init; }
+
+    /// <summary>
     /// TCP ports 80 and 443 something local listens on (null when unreadable). Defaults to
     /// <see cref="Safety.Preflight.LoopbackWebListeners"/>. Tests drive it to prove the fallback.
     /// </summary>
@@ -133,6 +140,7 @@ public sealed class ProtectionService
     private readonly QuarantineEngine _quarantine;
     private readonly MarkerScanner _markers;
     private readonly IReadOnlyList<MarkerDefinition> _markerCatalog;
+    private readonly AuditLog _audit;
     private readonly Func<IReadOnlyList<int>?> _webListeners;
     private readonly ChangeJournal _journal;
 
@@ -142,6 +150,7 @@ public sealed class ProtectionService
     private readonly bool _sweepFirewallGroupOnRevert;
 
     public ChangeJournal Journal => _journal;
+    public AuditLog Audit => _audit;
     public QuarantineEngine Quarantine => _quarantine;
     public FirewallEngine Firewall => _firewall;
     public HostsFileEngine Hosts => _hosts;
@@ -161,6 +170,7 @@ public sealed class ProtectionService
         _quarantine = o.Quarantine ?? new QuarantineEngine();
         _markers = o.Markers ?? new MarkerScanner(new SystemMarkerEnvironment(_services));
         _markerCatalog = o.MarkerCatalog ?? Markers.MarkerCatalog.All;
+        _audit = o.Audit ?? (options is null ? new AuditLog() : AuditLog.Disabled);
         _webListeners = o.WebListeners ?? Safety.Preflight.LoopbackWebListeners;
 
         _catalog = o.Catalog ?? RuleCatalog.All;
@@ -609,6 +619,7 @@ public sealed class ProtectionService
 
         AppPaths.EnsureCreated();
         Log.Info($"=== APPLY start: {plan.Changes.Count} planned changes ===");
+        _audit.Append("apply.start", detail: $"{plan.Changes.Count} planned changes");
 
         var refusedIds = plan.Changes.Where(c => c.Outcome == ChangeOutcome.Refused)
                                      .Select(c => c.RuleId).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -619,7 +630,11 @@ public sealed class ProtectionService
             ct.ThrowIfCancellationRequested();
 
             if (change.Outcome is ChangeOutcome.Refused or ChangeOutcome.NotPresent or ChangeOutcome.AlreadySatisfied)
+            {
+                if (change.Outcome == ChangeOutcome.Refused)
+                    _audit.Append("change", change.RuleId, change.Engine.ToString(), change.Target, "Refused", change.RefusalReason);
                 continue;
+            }
 
             progress?.Report(change.Description);
 
@@ -642,11 +657,16 @@ public sealed class ProtectionService
                 change.Error = ex.Message;
                 Log.Error($"Change failed: {change.Description}", ex);
             }
+
+            _audit.Append(change.IsUndo ? "undo" : "change", change.RuleId, change.Engine.ToString(), change.Target,
+                change.Outcome.ToString(), change.Error ?? change.Description);
         }
 
         var report = new ApplyReport { Plan = plan };
         Log.Info($"=== APPLY done: {report.Applied} applied, {report.Skipped} skipped, " +
                  $"{report.Failed} failed, {report.Refused} refused ===");
+        _audit.Append("apply.done", detail:
+            $"{report.Applied} applied, {report.Skipped} skipped, {report.Failed} failed, {report.Refused} refused");
         return report;
     }
 
@@ -754,6 +774,7 @@ public sealed class ProtectionService
 
         var errors = new List<string>();
         Log.Info($"=== REVERT start: {_journal.Entries.Count} entries ===");
+        _audit.Append("restore.start", detail: $"{_journal.Entries.Count} journal entries");
 
         foreach (var entry in _journal.ReplayOrder())
         {
@@ -764,12 +785,14 @@ public sealed class ProtectionService
             {
                 await RevertEntryAsync(entry, ct).ConfigureAwait(false);
                 _journal.Remove(entry);
+                _audit.Append("undo", entry.RuleId, entry.Engine.ToString(), entry.Target, "Applied", entry.Description);
             }
             catch (Exception ex)
             {
                 // Leave the entry in place so a later attempt can retry it.
                 errors.Add($"{entry.Description}: {ex.Message}");
                 Log.Error($"Revert failed for {entry.Description}", ex);
+                _audit.Append("undo", entry.RuleId, entry.Engine.ToString(), entry.Target, "Failed", ex.Message);
             }
         }
 
@@ -781,6 +804,7 @@ public sealed class ProtectionService
         }
 
         Log.Info($"=== REVERT done: {errors.Count} errors, {_journal.Entries.Count} entries remaining ===");
+        _audit.Append("restore.done", detail: $"{errors.Count} errors, {_journal.Entries.Count} entries remaining");
         return errors;
     }
 
@@ -798,6 +822,7 @@ public sealed class ProtectionService
             {
                 await RevertEntryAsync(entry, ct).ConfigureAwait(false);
                 _journal.Remove(entry);
+                _audit.Append("undo", entry.RuleId, entry.Engine.ToString(), entry.Target, "Applied", entry.Description);
             }
             catch (Exception ex) { errors.Add($"{entry.Description}: {ex.Message}"); }
         }

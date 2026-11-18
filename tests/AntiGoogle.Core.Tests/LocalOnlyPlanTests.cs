@@ -18,6 +18,7 @@ using AntiGoogle.Core.Engines;
 using AntiGoogle.Core.Journal;
 using AntiGoogle.Core.Markers;
 using AntiGoogle.Core.Model;
+using AntiGoogle.Core.Reporting;
 using AntiGoogle.Core.Safety;
 using Microsoft.Win32;
 using Xunit;
@@ -195,7 +196,7 @@ public class LocalOnlyPlanTests : IDisposable
         return path;
     }
 
-    private ProtectionService Service(IReadOnlyList<BlockRule> catalog, IReadOnlyList<MarkerDefinition>? markers = null)
+    private ProtectionService Service(IReadOnlyList<BlockRule> catalog, IReadOnlyList<MarkerDefinition>? markers = null, bool audit = false)
     {
         var vault = Path.Combine(_root, "vault");
         return new ProtectionService(new ProtectionServiceOptions
@@ -209,6 +210,7 @@ public class LocalOnlyPlanTests : IDisposable
             Markers = new MarkerScanner(_markerEnv),
             MarkerCatalog = markers ?? [],
             Journal = new ChangeJournal(Path.Combine(_root, "journal.json")),
+            Audit = audit ? new AuditLog(Path.Combine(_root, "audit.jsonl")) : null,
             Catalog = catalog,
             Preflight = _ => Task.FromResult(_findings),
             IsElevated = () => true,
@@ -786,5 +788,31 @@ public class LocalOnlyPlanTests : IDisposable
         Assert.True(File.Exists(path));
         Assert.Equal(before, File.ReadAllBytes(_hostsPath));
         Assert.Empty(svc.Journal.Entries);
+    }
+
+    [Fact]
+    public async Task EveryChangeAndUndoIsRecordedInTheAuditLog()
+    {
+        var app = Exe("FakeApp.exe");
+        var svc = Service([], audit: true);
+
+        await svc.ApplyAsync(await svc.BuildPlanAsync(Request([], localOnlyApps: [app])));
+        await svc.RevertAllAsync();
+
+        var events = svc.Audit.Tail(100);
+        Assert.Contains(events, e => e.Kind == "apply.start");
+        Assert.Contains(events, e => e.Kind == "change" && e.Engine == "LocalOnly" && e.Outcome == "Applied");
+        Assert.Contains(events, e => e.Kind == "apply.done");
+        Assert.Contains(events, e => e.Kind == "restore.start");
+        Assert.Contains(events, e => e.Kind == "undo" && e.Outcome == "Applied");
+        Assert.Contains(events, e => e.Kind == "restore.done");
+    }
+
+    [Fact]
+    public async Task ASuppliedOptionsObjectNeverWritesToTheRealAuditLog()
+    {
+        var svc = Service([]); // audit: false -> options.Audit is null
+        Assert.False(svc.Audit.IsEnabled);
+        await svc.ApplyAsync(await svc.BuildPlanAsync(Request([])));
     }
 }

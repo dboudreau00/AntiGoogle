@@ -22,6 +22,8 @@ using AntiGoogle.Core.Discovery;
 using AntiGoogle.Core.Journal;
 using AntiGoogle.Core.Markers;
 using AntiGoogle.Core.Model;
+using AntiGoogle.Core.Reporting;
+using AntiGoogle.Core.Verification;
 using AntiGoogle.Core.Platform;
 using AntiGoogle.Core.Safety;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -93,6 +95,7 @@ public partial class MainViewModel : ObservableObject
     ];
 
     public ObservableCollection<MarkerGroupViewModel> MarkerGroups { get; } = [];
+    public ObservableCollection<VerificationRowViewModel> VerificationRows { get; } = [];
     public ObservableCollection<RuleGroupViewModel> RuleGroups { get; }
     public ObservableCollection<DegradationRow> Degradations { get; } = [];
     public ObservableCollection<PreflightFinding> Findings { get; } = [];
@@ -119,6 +122,12 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty] private bool _hasScannedMarkers;
     [ObservableProperty] private string _markerSummary = "";
+    [ObservableProperty] private bool _hasVerification;
+    [ObservableProperty] private string _verificationVerdict = "";
+    [ObservableProperty] private string _verificationLevel = "info";
+    [ObservableProperty] private string _lastReportPath = "";
+    [ObservableProperty] private string _lastReportSummary = "";
+    [ObservableProperty] private bool _hasLastReport;
 
     [ObservableProperty] private int _severeCount;
     [ObservableProperty] private int _notableCount;
@@ -326,6 +335,20 @@ public partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     private void ClearResult() => SetResult("", "info");
+
+    /// <summary>The bare version number, for the report.</summary>
+    public static string VersionNumber
+    {
+        get
+        {
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            var informational = asm
+                .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+                .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+                .FirstOrDefault()?.InformationalVersion;
+            return informational?.Split('+')[0] ?? asm.GetName().Version?.ToString() ?? "unknown";
+        }
+    }
 
     /// <summary>Shown on the About page and in the exe's file properties.</summary>
     public string VersionLabel
@@ -641,6 +664,46 @@ public partial class MainViewModel : ObservableObject
         RecomputeDegradations();
     }
 
+    [RelayCommand]
+    private async Task VerifyContainmentAsync()
+    {
+        if (_service is null) return;
+
+        await RunBusyAsync("Checking that confined programs stay on this machine…", async () =>
+        {
+            var result = await new LoopbackVerifier(_service.Firewall, _service.Hosts, _service.Journal).VerifyAsync().ConfigureAwait(true);
+
+            VerificationRows.Clear();
+            foreach (var t in result.Targets)
+                foreach (var c in t.Checks)
+                    VerificationRows.Add(new VerificationRowViewModel(
+                        t.ProgramPath is not null ? Path.GetFileName(t.ProgramPath) : $"service {t.ServiceName}", c));
+            foreach (var c in result.Hosts)
+                VerificationRows.Add(new VerificationRowViewModel("hosts file", c));
+
+            HasVerification = true;
+            if (!result.AnythingToVerify)
+            {
+                VerificationVerdict = "Nothing is confined to this machine right now. Apply local-only first.";
+                VerificationLevel = "info";
+            }
+            else if (result.Passed)
+            {
+                VerificationVerdict = result.Targets.Count > 0
+                    ? "Every check holds. The rules are in place and nothing confined is connected off this machine."
+                    : "Every check holds.";
+                VerificationLevel = "ok";
+            }
+            else
+            {
+                VerificationVerdict = $"{VerificationRows.Count(r => !r.Passed)} checks failed. Details below.";
+                VerificationLevel = "error";
+            }
+
+            SetResult(VerificationVerdict, VerificationLevel);
+        }).ConfigureAwait(true);
+    }
+
     private void OnContainmentChanged(ContainedAppViewModel vm, bool contained)
     {
         if (contained)
@@ -708,6 +771,72 @@ public partial class MainViewModel : ObservableObject
 
         _settings.Save();
         RecomputeDegradations();
+    }
+
+    // ---------------------------------------------------------------- report
+
+    [RelayCommand]
+    private async Task GenerateReportAsync()
+    {
+        if (_service is null) return;
+
+        await RunBusyAsync("Building the report…", async () =>
+        {
+            var report = await new ReportBuilder(_service, VersionNumber).BuildAsync(_settings).ConfigureAwait(true);
+            var saved = ReportWriter.Save(report);
+
+            LastReportPath = saved.HtmlPath;
+            HasLastReport = true;
+            LastReportSummary = $"{report.GeneratedAt:yyyy-MM-dd HH:mm}  ·  {report.Counts.SinkholedDomains} names sinkholed, " +
+                                $"{report.Counts.LoopbackDomains} looped, {report.Counts.LocalOnlyJails} programs confined, " +
+                                $"{report.Counts.QuarantinedItems} quarantined" +
+                                (report.VerificationPassed is bool ok ? (ok ? "  ·  verification passed" : "  ·  verification FAILED") : "");
+
+            var verificationFailed = report.VerificationPassed == false;
+            if (TryOpenReport(out var why))
+                SetResult("Report saved and opened.", verificationFailed ? "error" : "ok");
+            else
+                SetResult($"Report saved to {saved.HtmlPath}. It could not be opened here: {why}", verificationFailed ? "error" : "warn");
+        }).ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private void OpenReport()
+    {
+        if (!TryOpenReport(out var why)) SetResult($"Could not open the report: {why}", "error");
+    }
+
+    private bool TryOpenReport(out string error)
+    {
+        error = "";
+        try
+        {
+            if (string.IsNullOrEmpty(LastReportPath) || !File.Exists(LastReportPath))
+            {
+                error = "the report file is not there.";
+                return false;
+            }
+
+            Process.Start(new ProcessStartInfo(LastReportPath) { UseShellExecute = true });
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    [RelayCommand]
+    private void OpenReportsFolder()
+    {
+        try
+        {
+            var dir = !string.IsNullOrEmpty(LastReportPath) ? Path.GetDirectoryName(LastReportPath)! : AppPaths.Reports;
+            Directory.CreateDirectory(dir);
+            Process.Start(new ProcessStartInfo(dir) { UseShellExecute = true });
+        }
+        catch (Exception ex) { SetResult($"Could not open the reports folder: {ex.Message}", "error"); }
     }
 
     // ---------------------------------------------------------------- misc
