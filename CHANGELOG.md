@@ -7,6 +7,48 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Local-only mode.** A service, scheduled task, app or hosts group can be kept running but confined
+  to this machine instead of being blocked. Programs get an outbound and an inbound firewall rule
+  blocking every address except loopback (a service inside `svchost.exe` is confined by name). Local-only
+  hosts names resolve to `127.0.0.1` and `::1`. Programs under the Windows directory are refused, and if
+  something local listens on port 80 or 443 the names are sinkholed instead. Every rule that offers it
+  declares its own cost. **Verify local-only** reads the rules back and checks live sockets.
+- **Markers.** Network rules for extended Google tracking and measurement hosts, Mandiant marketing
+  trackers (armed by default), and Mandiant's portal and API, VirusTotal and Google SecOps (off by
+  default). A read-only scan for host markers (crash dumps, the Software Reporter Tool, usage IDs, Google
+  Update records, FireEye, Trellix and Mandiant software), each with a stated confidence.
+- **Quarantine.** Identifiers, leftovers and optional components can be moved into
+  `%ProgramData%\AntiGoogle\quarantine` with a manifest and a SHA-256 per file, and restored byte for
+  byte. Nothing is deleted, nothing is overwritten on restore, links are never followed, and security
+  agents are never touched. The Mandiant services rule is refused while an endpoint agent is installed.
+- **Reports.** One self-contained HTML file and a JSON file describing what is armed, changed,
+  confined and quarantined, with the evidence. `AntiGoogle.exe --report` writes one without a window.
+  An append-only audit log, `audit.jsonl`, records every apply, undo, quarantine and restore.
+- **Plans make the machine match the armed set.** A rule that was applied and is no longer armed, or
+  that moved between blocking and local-only, is undone by the next apply, and the preview lists those
+  undo changes first.
+- `tests/AntiGoogle.Elevated`, an end-to-end harness for a disposable virtual machine with a UI
+  Automation script for the real window, and `docs/SPEC.md`.
+- README screenshots of every page and flow, captured from this build in a test VM, including local-only
+  mode, markers, quarantine, the generated report, Apply and Restore.
+
+### Fixed
+
+Found by running the real engines on a Windows 11 virtual machine:
+
+- Restoring a service turned "Automatic (Delayed Start)" into plain Automatic.
+- The preflight warned that "something else" was managing Chrome after Anti-Google had set the policy
+  itself. It now counts only values the journal does not record as its own.
+- Restoring left an empty `HKLM\SOFTWARE\Policies\Google` behind when Anti-Google had created it.
+- Applying and restoring changed the hosts file's owner and access list. It is now overwritten in
+  place.
+
+---
+
 ## [0.1.0] — 2026-08-06
 
 First public release. Everything below is new.
