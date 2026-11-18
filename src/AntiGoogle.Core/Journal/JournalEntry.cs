@@ -74,5 +74,13 @@ public sealed class JournalEntry
     /// <summary>True when we created the key itself; revert removes it if we left it empty.</summary>
     public bool RegistryKeyCreated { get; set; }
 
+    /// <summary>
+    /// The shallowest key this change had to create (for instance SOFTWARE\Policies\Google when none of
+    /// Policies\Google\Chrome existed). Revert removes the empty keys from the leaf up to and including
+    /// it, so the machine does not keep an empty parent that was never there. Null in journals written
+    /// before this field existed, which then only ever remove the leaf.
+    /// </summary>
+    public string? RegistryCreatedRoot { get; set; }
+
     public override string ToString() => $"{At:yyyy-MM-dd HH:mm} {Description}";
 }
