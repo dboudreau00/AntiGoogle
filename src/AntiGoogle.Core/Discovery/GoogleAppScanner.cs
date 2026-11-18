@@ -25,7 +25,10 @@ public enum AppOrigin
     ChromiumBrowser,
 
     /// <summary>An Electron/CEF app — Chromium embedded inside unrelated software.</summary>
-    ChromiumEmbedded
+    ChromiumEmbedded,
+
+    /// <summary>A program the user chose earlier that this scan did not find again. Kept in the list so it can be changed.</summary>
+    Chosen
 }
 
 /// <param name="Evidence">Why this binary was flagged, shown verbatim in the UI so the scan is auditable.</param>
@@ -41,6 +44,7 @@ public sealed record DiscoveredApp(
     {
         AppOrigin.GoogleFirstParty => "Google",
         AppOrigin.ChromiumBrowser => "Chromium browser",
+        AppOrigin.Chosen => "Chosen earlier",
         _ => "Embedded Chromium"
     };
 }

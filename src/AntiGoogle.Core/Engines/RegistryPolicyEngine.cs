@@ -58,6 +58,7 @@ public sealed class RegistryPolicyEngine : IRevertEngine
         using var root = BaseKey(policy.Hive);
 
         var keyExisted = root.OpenSubKey(policy.Key) is not null;
+        var createdRoot = keyExisted ? null : FirstMissingKey(root, policy.Key);
         object? previous = null;
         RegistryValueKind? previousKind = null;
 
@@ -87,7 +88,8 @@ public sealed class RegistryPolicyEngine : IRevertEngine
             RegistryName = policy.Name,
             PreviousValue = previous is null ? null : Stringify(previous),
             PreviousValueKind = previousKind?.ToString(),
-            RegistryKeyCreated = !keyExisted
+            RegistryKeyCreated = !keyExisted,
+            RegistryCreatedRoot = createdRoot
         });
 
         using var write = root.CreateSubKey(policy.Key, writable: true)
@@ -118,19 +120,15 @@ public sealed class RegistryPolicyEngine : IRevertEngine
             try { key.DeleteValue(entry.RegistryName, throwOnMissingValue: false); }
             catch (Exception ex) { Log.Warn($"Could not delete {entry.RegistryName}: {ex.Message}"); }
 
-            // If we also created the key and it is now empty, take it back out so the machine
-            // looks untouched rather than carrying an empty policy key forever.
-            if (entry.RegistryKeyCreated &&
-                key.GetValueNames().Length == 0 &&
-                key.GetSubKeyNames().Length == 0)
+            // If we also created the key and it is now empty, take it back out so the machine looks
+            // untouched rather than carrying an empty policy key forever. That includes the parents we
+            // had to create on the way: Policies\Google\Chrome on a machine with no Google policies at
+            // all leaves an empty Policies\Google behind unless it is removed too (measured on a real
+            // Windows 11 round trip).
+            if (entry.RegistryKeyCreated)
             {
                 key.Dispose();
-                try
-                {
-                    root.DeleteSubKey(entry.RegistryKey, throwOnMissingSubKey: false);
-                    Log.Info($"Registry: removed empty key {entry.RegistryKey}");
-                }
-                catch (Exception ex) { Log.Warn($"Could not remove {entry.RegistryKey}: {ex.Message}"); }
+                RemoveEmptyCreatedKeys(root, entry.RegistryKey, entry.RegistryCreatedRoot);
             }
         }
         else
@@ -143,6 +141,62 @@ public sealed class RegistryPolicyEngine : IRevertEngine
         return Task.CompletedTask;
     }
 
+
+    /// <summary>Registry key paths are backslash-separated.</summary>
+    private const char KeySeparator = (char)92;
+
+    /// <summary>The shallowest ancestor of <paramref name="key"/> (or the key itself) that does not exist yet.</summary>
+    private static string? FirstMissingKey(RegistryKey root, string key)
+    {
+        var path = "";
+        foreach (var segment in key.Split(KeySeparator))
+        {
+            path = path.Length == 0 ? segment : path + "\\" + segment;
+            using var existing = root.OpenSubKey(path);
+            if (existing is null) return path;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Removes <paramref name="leaf"/> and then each parent, for as long as the key is empty, stopping at
+    /// <paramref name="createdRoot"/>. A key that has gained values or subkeys since — somebody else's
+    /// policy — is left strictly alone, and so is everything above it.
+    /// </summary>
+    private static void RemoveEmptyCreatedKeys(RegistryKey root, string leaf, string? createdRoot)
+    {
+        var stopAt = createdRoot is not null &&
+                     (leaf.Equals(createdRoot, StringComparison.OrdinalIgnoreCase) ||
+                      leaf.StartsWith(createdRoot + "\\", StringComparison.OrdinalIgnoreCase))
+            ? createdRoot
+            : leaf;
+
+        var current = leaf;
+        while (true)
+        {
+            using (var k = root.OpenSubKey(current))
+            {
+                if (k is not null && (k.GetValueNames().Length > 0 || k.GetSubKeyNames().Length > 0))
+                    return;
+            }
+
+            try
+            {
+                root.DeleteSubKey(current, throwOnMissingSubKey: false);
+                Log.Info($"Registry: removed empty key {current}");
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"Could not remove {current}: {ex.Message}");
+                return;
+            }
+
+            if (current.Equals(stopAt, StringComparison.OrdinalIgnoreCase)) return;
+            var cut = current.LastIndexOf(KeySeparator);
+            if (cut < 0) return;
+            current = current[..cut];
+        }
+    }
 
     /// <summary>NUL is the REG_MULTI_SZ element separator, so it can never occur inside an element.</summary>
     private const char MultiStringSeparator = '\u0000';

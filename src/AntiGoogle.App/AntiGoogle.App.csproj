@@ -16,7 +16,7 @@
 
   <PropertyGroup>
     <!-- Surfaced on the About page and in the exe's file properties. -->
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Product>Anti-Google</Product>
     <AssemblyTitle>Anti-Google</AssemblyTitle>
     <Description>Removes Google telemetry from Windows, and tells you what that breaks first.</Description>

@@ -79,6 +79,29 @@ public class ScheduledTaskEngine : IRevertEngine
         return results;
     }
 
+    /// <summary>
+    /// The programs a task runs, as full paths. Local-only mode confines a program, so a task that runs
+    /// something it cannot name (a relative command, a script host) yields nothing and is not confined.
+    /// </summary>
+    public virtual async Task<IReadOnlyList<string>> ResolveActionPathsAsync(string taskPath, CancellationToken ct = default)
+    {
+        var (folder, name) = SplitTaskPath(taskPath);
+        var res = await ProcessRunner.PowerShellAsync(
+            $"(Get-ScheduledTask -TaskPath '{Escape(folder)}' -TaskName '{Escape(name)}' -ErrorAction SilentlyContinue).Actions | " +
+            "ForEach-Object { if ($_.Execute) { [Environment]::ExpandEnvironmentVariables($_.Execute) } }",
+            60_000, ct).ConfigureAwait(false);
+
+        return ParseActionPaths(res.StdOut);
+    }
+
+    internal static IReadOnlyList<string> ParseActionPaths(string output) =>
+        output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+              .Select(l => l.Trim().Trim('"'))
+              .Where(l => l.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                          && Path.IsPathFullyQualified(l) && !l.Contains('*') && !l.Contains('?'))
+              .Distinct(StringComparer.OrdinalIgnoreCase)
+              .ToList();
+
     public virtual async Task<ChangeOutcome> ApplyAsync(BlockRule rule, TaskInfo task, ChangeJournal journal, CancellationToken ct)
     {
         if (!task.Enabled) return ChangeOutcome.AlreadySatisfied;

@@ -107,6 +107,117 @@ public class CatalogTests
         }
     }
 
+    private static readonly string[] MarkerRuleIds =
+    [
+        "hosts.google-measurement-extra", "hosts.mandiant-tracking", "hosts.mandiant-services", "hosts.virustotal", "hosts.google-secops"
+    ];
+
+    [Fact]
+    public void EveryRuleThatSupportsLocalOnlyDeclaresItsOwnCost()
+    {
+        foreach (var rule in RuleCatalog.All.Where(r => r.SupportsLocalOnly))
+        {
+            Assert.NotEmpty(rule.LocalOnlyBreaks);
+            foreach (var b in rule.LocalOnlyBreaks.Where(b => b.Severity == BreakageSeverity.Severe))
+                Assert.True(b.Detail.Length > 40, $"{rule.Id}: severe local-only cost '{b.What}' needs a real explanation.");
+        }
+    }
+
+    [Fact]
+    public void LocalOnlyIsOnlyOfferedWhereKeepingSomethingAliveMakesSense()
+    {
+        foreach (var rule in RuleCatalog.All.Where(r => r.SupportsLocalOnly))
+            Assert.True(rule.Engine is EngineKind.Hosts or EngineKind.Service or EngineKind.ScheduledTask,
+                $"{rule.Id} offers local-only but is a {rule.Engine} rule.");
+
+        foreach (var rule in RuleCatalog.All.Where(r => !r.SupportsLocalOnly))
+            Assert.Empty(rule.LocalOnlyBreaks);
+    }
+
+    [Fact]
+    public void TheUpdaterServicesAndTasksCanBeKeptRunningLocally()
+    {
+        foreach (var id in new[] { "svc.google-updater", "task.google-updater", "svc.chrome-elevation" })
+            Assert.True(RuleCatalog.ById(id)!.SupportsLocalOnly, $"{id} should offer local-only.");
+    }
+
+    [Fact]
+    public void LocalOnlyNeverHidesTheSecurityCostOfLosingUpdates()
+    {
+        // Confining the updater is not a free alternative to disabling it: Chrome still is not patched.
+        foreach (var id in new[] { "svc.google-updater", "task.google-updater" })
+            Assert.Contains(RuleCatalog.ById(id)!.LocalOnlyBreaks, b => b.Severity == BreakageSeverity.Severe);
+    }
+
+    [Fact]
+    public void TheMarkerRulesExistAndHaveTheDefaultsTheirNatureCallsFor()
+    {
+        foreach (var id in MarkerRuleIds) Assert.NotNull(RuleCatalog.ById(id));
+
+        // Trackers are armed by the shipped profile. Services a security practitioner may use are not.
+        Assert.True(RuleCatalog.ById("hosts.google-measurement-extra")!.DefaultEnabled);
+        Assert.True(RuleCatalog.ById("hosts.mandiant-tracking")!.DefaultEnabled);
+        Assert.False(RuleCatalog.ById("hosts.mandiant-services")!.DefaultEnabled);
+        Assert.False(RuleCatalog.ById("hosts.virustotal")!.DefaultEnabled);
+        Assert.False(RuleCatalog.ById("hosts.google-secops")!.DefaultEnabled);
+    }
+
+    [Fact]
+    public void TheAgentSensitiveRulesAreRealRules()
+    {
+        foreach (var id in RuleCatalog.AgentSensitiveRuleIds)
+            Assert.NotNull(RuleCatalog.ById(id));
+    }
+
+    [Fact]
+    public void ATrackerRuleNeverListsAServiceUsersSignInTo()
+    {
+        string[] services = ["google.com", "www.google.com", "accounts.google.com", "ads.google.com", "admob.com", "marketingplatform.google.com",
+            "mail.google.com", "drive.google.com", "docs.google.com", "youtube.com", "www.youtube.com"];
+        var domains = RuleCatalog.ById("hosts.google-measurement-extra")!.Domains;
+        Assert.Empty(domains.Intersect(services, StringComparer.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void NoHostsRuleCanBreakNameResolutionOfThisMachineItself()
+    {
+        foreach (var d in RuleCatalog.All.Where(r => r.Engine == EngineKind.Hosts).SelectMany(r => r.Domains))
+        {
+            Assert.False(System.Net.IPAddress.TryParse(d, out _), $"{d} is an address, not a name.");
+            Assert.NotEqual("localhost", d);
+            Assert.False(d.EndsWith(".local") || d.EndsWith(".lan") || d.EndsWith(".internal") || d.EndsWith(".localhost"), d);
+            Assert.Contains('.', d);
+        }
+    }
+
+    [Fact]
+    public void TheCopyOfTheNewRulesUsesNoEmOrEnDashes()
+    {
+        foreach (var rule in MarkerRuleIds.Select(id => RuleCatalog.ById(id)!))
+        foreach (var text in new[] { rule.Title, rule.Summary, rule.Note ?? "" }
+                     .Concat(rule.Breaks.SelectMany(b => new[] { b.What, b.Detail })))
+        {
+            Assert.DoesNotContain('—', text);
+            Assert.DoesNotContain('–', text);
+        }
+    }
+
+    [Fact]
+    public void AnOldSettingsFileWithoutTheNewFieldsStillLoadsWithEmptyLists()
+    {
+        const string old = """{"EnabledRuleIds":["hosts.beacons"],"ContainedApps":[],"Profile":"Aggressive","AcknowledgedRuleIds":[],"FirstRunCompleted":true}""";
+        var loaded = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(old, new System.Text.Json.JsonSerializerOptions
+        {
+            Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+        })!;
+
+        Assert.Equal(["hosts.beacons"], loaded.EnabledRuleIds);
+        Assert.Empty(loaded.LocalOnlyRuleIds);
+        Assert.Empty(loaded.LocalOnlyApps);
+        Assert.Empty(loaded.QuarantineMarkerIds);
+        Assert.Empty(loaded.AcknowledgedMarkerIds);
+    }
+
     [Fact]
     public void GoogleDnsIsNotInTheCoreFirewallRanges()
     {

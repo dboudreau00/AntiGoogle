@@ -26,6 +26,11 @@ machine in a state the user did not choose and cannot get out of:
 - Privilege issues: anything that lets a non-administrator cause a privileged change, or that
   widens the surface of the elevated path.
 - Command injection through a rule payload into the PowerShell or `sc.exe` invocations.
+- **Quarantine moving something it must not**: a security agent's files, anything under the Windows
+  directory, a path that is not one of the catalog's own locations, or the target of a link.
+- **Local-only confining the wrong thing**: a system binary, or a rule that Windows holds differently
+  from how it was specified.
+- **A report carrying a secret**, the contents of an identifier file, or anything that runs when it is opened.
 
 ## What does not count
 
@@ -36,10 +41,11 @@ machine in a state the user did not choose and cannot get out of:
 
 ## Scope and honesty
 
-Anti-Google is not audited software. It has been reviewed adversarially and has an automated suite,
-but the elevated Apply → Restore round trip has never been exercised against a real machine — see
-the limitations section of the README. Treat it accordingly and prefer a disposable VM for your
-first run.
+Anti-Google is not audited software. It has been reviewed adversarially and has an automated suite.
+The elevated Apply and Restore round trip has been run on a Windows 11 virtual machine by
+`tests/AntiGoogle.Elevated` (see `docs/ELEVATED-TESTING.md`), which found and fixed three ways a
+restore was not exact. It has not been run on a domain-joined machine or against a real Chrome, Drive
+or Mandiant installation. Treat it accordingly and prefer a disposable VM for your first run.
 
 ## Supported versions
 

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Elevated end-to-end harness. NOT part of `dotnet test`.
+
+    The unit suite cannot reach the parts of this app that need administrator rights: service and
+    scheduled-task mutation, firewall rules, HKLM writes and the real hosts file's ACL path. This
+    console app drives the real engines against a real machine, reads the result back with
+    independent tools, reverts, and compares the machine to a snapshot taken before.
+
+    It modifies the machine it runs on. It refuses to start unless it is elevated AND the machine
+    is a virtual machine (or you pass an explicit allow-physical flag), and it needs an explicit
+    confirmation flag. See docs/ELEVATED-TESTING.md.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>AntiGoogle.Elevated</RootNamespace>
+    <AssemblyName>AntiGoogle.Elevated</AssemblyName>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <IsTestProject>false</IsTestProject>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AntiGoogle.Core\AntiGoogle.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -67,6 +67,159 @@
             </Border>
         </DataTemplate>
 
+        <!-- A rule card. A resource, so the Rules page and the Markers page show the same rule
+             with the same controls and cannot drift apart. -->
+        <DataTemplate x:Key="RuleCardTemplate" DataType="{x:Type vm:RuleViewModel}">
+
+            <Border Style="{StaticResource Card}" Padding="16" Margin="0,0,0,9">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <Border CornerRadius="{StaticResource RadiusXs}" Padding="5,1" Margin="0,0,7,0"
+                                        Background="{StaticResource Surface3}">
+                                    <TextBlock Text="{Binding EngineLabel}" FontSize="{StaticResource FontChip}"
+                                               FontWeight="Bold" Foreground="{StaticResource TextMuted}" />
+                                </Border>
+                                <Border CornerRadius="{StaticResource RadiusXs}" Padding="5,1" Margin="0,0,7,0"
+                                        Background="{StaticResource Surface3}">
+                                    <TextBlock Text="{Binding TierLabel}" FontSize="{StaticResource FontChip}" FontWeight="Bold"
+                                               Foreground="{Binding Tier, Converter={StaticResource TierBrush}}" />
+                                </Border>
+                                <Border CornerRadius="{StaticResource RadiusXs}" Padding="5,1" Margin="0,0,7,0" Background="#2234C38A"
+                                        Visibility="{Binding IsLocalOnly, Converter={StaticResource BoolVis}}">
+                                    <TextBlock Text="LOCAL-ONLY" FontSize="{StaticResource FontChip}" FontWeight="Bold"
+                                               Foreground="{StaticResource SevNone}" />
+                                </Border>
+                                <Border CornerRadius="{StaticResource RadiusXs}" Padding="5,1" Background="#44FF4D4F"
+                                        Visibility="{Binding NeedsConsent, Converter={StaticResource BoolVis}}">
+                                    <TextBlock Text="CONSENT" FontSize="{StaticResource FontChip}" FontWeight="Bold"
+                                               Foreground="#FF8B8D" />
+                                </Border>
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
+                                       FontSize="{StaticResource FontMd}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding Summary}" Style="{StaticResource Muted}"
+                                       Margin="0,4,0,0" />
+
+                            <!-- WrapPanel, not StackPanel: this row is the rule's cost
+                                 summary and must survive a narrow window. -->
+                            <WrapPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <TextBlock Text="{Binding TargetSummary}" Style="{StaticResource Mono}"
+                                           VerticalAlignment="Center" Margin="0,0,10,0" />
+                                <Border CornerRadius="{StaticResource RadiusXs}" Padding="6,2" Margin="0,0,10,0"
+                                        Background="{StaticResource Surface2}"
+                                        Visibility="{Binding HasBreaks, Converter={StaticResource BoolVis}}">
+                                    <TextBlock Text="{Binding BreakSummary}" FontSize="{StaticResource FontSm}"
+                                               FontWeight="SemiBold"
+                                               Foreground="{Binding WorstBreakage, Converter={StaticResource SevBrush}}" />
+                                </Border>
+                                <ToggleButton Style="{StaticResource LinkToggle}"
+                                              IsChecked="{Binding IsExpanded, Mode=TwoWay}"
+                                              AutomationProperties.Name="{Binding DetailToggleAutomationName}"
+                                              VerticalAlignment="Center"
+                                              Visibility="{Binding HasBreaks, Converter={StaticResource BoolVis}}" />
+                                <CheckBox Content="Keep running, local-only" VerticalAlignment="Center" Margin="14,0,0,0"
+                                          IsChecked="{Binding IsLocalOnly, Mode=TwoWay}"
+                                          AutomationProperties.Name="{Binding LocalOnlyAutomationName}"
+                                          Visibility="{Binding SupportsLocalOnly, Converter={StaticResource BoolVis}}" />
+                            </WrapPanel>
+                        </StackPanel>
+
+                        <CheckBox Grid.Column="1" VerticalAlignment="Top"
+                                  IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                                  AutomationProperties.Name="{Binding ToggleAutomationName}" />
+                    </Grid>
+
+                    <!-- Expanded detail -->
+                    <StackPanel Margin="0,14,0,0"
+                                Visibility="{Binding IsExpanded, Converter={StaticResource BoolVis}}">
+
+                        <Border Background="{StaticResource Surface2}"
+                                CornerRadius="{StaticResource RadiusMd}" Padding="12" Margin="0,0,0,9"
+                                Visibility="{Binding HasNote, Converter={StaticResource BoolVis}}">
+                            <TextBlock Text="{Binding Note}" Style="{StaticResource Muted}" />
+                        </Border>
+
+                        <ItemsControl ItemsSource="{Binding Breaks}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Width="3" CornerRadius="{StaticResource RadiusXs}" Margin="0,2,11,2"
+                                                Background="{Binding Severity, Converter={StaticResource SevBrush}}" />
+                                        <StackPanel Grid.Column="1">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <!-- Severity as a word, not just a hue. -->
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding Severity, Converter={StaticResource SevLabel}}"
+                                                           FontSize="{StaticResource FontChip}" FontWeight="Bold"
+                                                           VerticalAlignment="Top" Margin="0,2,9,0"
+                                                           Foreground="{Binding Severity, Converter={StaticResource SevBrush}}" />
+                                                <TextBlock Grid.Column="1" Text="{Binding What}"
+                                                           FontWeight="SemiBold" FontSize="{StaticResource FontSm}"
+                                                           TextWrapping="Wrap" />
+                                            </Grid>
+                                            <TextBlock Text="{Binding Detail}" Style="{StaticResource Muted}"
+                                                       Margin="0,3,0,0" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+        </DataTemplate>
+
+        <DataTemplate x:Key="MarkerCardTemplate" DataType="{x:Type vm:MarkerViewModel}">
+            <Border Style="{StaticResource Card}" Padding="16" Margin="0,0,0,8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <Border CornerRadius="{StaticResource RadiusXs}" Padding="5,1" Margin="0,0,7,0" Background="{StaticResource Surface3}">
+                                <TextBlock Text="{Binding ClassLabel}" FontSize="{StaticResource FontChip}" FontWeight="Bold"
+                                           Foreground="{StaticResource Accent}" />
+                            </Border>
+                            <Border CornerRadius="{StaticResource RadiusXs}" Padding="5,1" Background="{StaticResource Surface3}">
+                                <TextBlock Text="{Binding ConfidenceLabel}" FontSize="{StaticResource FontChip}" FontWeight="Bold"
+                                           Foreground="{StaticResource TextMuted}" />
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="{StaticResource FontMd}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Why}" Style="{StaticResource Muted}" Margin="0,4,0,0" />
+                        <TextBlock Text="{Binding Where}" Style="{StaticResource Mono}" Margin="0,8,0,0" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Notes}" Style="{StaticResource Muted}" Margin="0,4,0,0"
+                                   Visibility="{Binding HasNotes, Converter={StaticResource BoolVis}}" />
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" VerticalAlignment="Top" Content="Quarantine"
+                              IsChecked="{Binding IsQuarantine, Mode=TwoWay}"
+                              AutomationProperties.Name="{Binding ToggleAutomationName}"
+                              Visibility="{Binding CanQuarantine, Converter={StaticResource BoolVis}}" />
+                    <TextBlock Grid.Column="1" VerticalAlignment="Top" Text="{Binding Handling}" Style="{StaticResource Muted}"
+                               Visibility="{Binding CanQuarantine, Converter={StaticResource NotBoolVis}}" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+
         <!-- Empty-state card. Three screens previously rendered as a header floating above
              nothing, which reads as a broken app rather than an empty one. -->
         <Style x:Key="EmptyState" TargetType="Border" BasedOn="{StaticResource Card}">
@@ -177,6 +330,8 @@
                     <ListBoxItem Content="Rules" />
                     <ListBoxItem Content="Impact report" />
                     <ListBoxItem Content="App containment" />
+                    <ListBoxItem Content="Markers" />
+                    <ListBoxItem Content="Report" />
                     <ListBoxItem Content="History &amp; restore" />
                     <ListBoxItem Content="About" />
                 </ListBox>
@@ -259,6 +414,31 @@
                                                    Foreground="{StaticResource SevNone}" />
                                         <TextBlock Text="REVERSIBLE" Style="{StaticResource EyebrowFaint}" />
                                         <TextBlock Text="CHANGES" Style="{StaticResource EyebrowFaint}" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <Grid Margin="0,18,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="{Binding LoopbackDomains}" FontSize="{StaticResource Font2Xl}" FontWeight="SemiBold" />
+                                        <TextBlock Text="NAMES" Style="{StaticResource EyebrowFaint}" />
+                                        <TextBlock Text="LOOPED HERE" Style="{StaticResource EyebrowFaint}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="{Binding LocalOnlyJails}" FontSize="{StaticResource Font2Xl}" FontWeight="SemiBold" />
+                                        <TextBlock Text="PROGRAMS" Style="{StaticResource EyebrowFaint}" />
+                                        <TextBlock Text="LOCAL-ONLY" Style="{StaticResource EyebrowFaint}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="{Binding QuarantinedItems}" FontSize="{StaticResource Font2Xl}" FontWeight="SemiBold" />
+                                        <TextBlock Text="ITEMS" Style="{StaticResource EyebrowFaint}" />
+                                        <TextBlock Text="QUARANTINED" Style="{StaticResource EyebrowFaint}" />
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>
@@ -389,115 +569,7 @@
                                         <TextBlock Text="{Binding Name}" Style="{StaticResource H2}"
                                                    Foreground="{StaticResource TextMuted}" />
 
-                                        <ItemsControl ItemsSource="{Binding Rules}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <Border Style="{StaticResource Card}" Padding="16" Margin="0,0,0,9">
-                                                        <StackPanel>
-                                                            <Grid>
-                                                                <Grid.ColumnDefinitions>
-                                                                    <ColumnDefinition Width="*" />
-                                                                    <ColumnDefinition Width="Auto" />
-                                                                </Grid.ColumnDefinitions>
-
-                                                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
-                                                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                                                        <Border CornerRadius="{StaticResource RadiusXs}" Padding="5,1" Margin="0,0,7,0"
-                                                                                Background="{StaticResource Surface3}">
-                                                                            <TextBlock Text="{Binding EngineLabel}" FontSize="{StaticResource FontChip}"
-                                                                                       FontWeight="Bold" Foreground="{StaticResource TextMuted}" />
-                                                                        </Border>
-                                                                        <Border CornerRadius="{StaticResource RadiusXs}" Padding="5,1" Margin="0,0,7,0"
-                                                                                Background="{StaticResource Surface3}">
-                                                                            <TextBlock Text="{Binding TierLabel}" FontSize="{StaticResource FontChip}" FontWeight="Bold"
-                                                                                       Foreground="{Binding Tier, Converter={StaticResource TierBrush}}" />
-                                                                        </Border>
-                                                                        <Border CornerRadius="{StaticResource RadiusXs}" Padding="5,1" Background="#44FF4D4F"
-                                                                                Visibility="{Binding NeedsConsent, Converter={StaticResource BoolVis}}">
-                                                                            <TextBlock Text="CONSENT" FontSize="{StaticResource FontChip}" FontWeight="Bold"
-                                                                                       Foreground="#FF8B8D" />
-                                                                        </Border>
-                                                                    </StackPanel>
-
-                                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
-                                                                               FontSize="{StaticResource FontMd}" TextWrapping="Wrap" />
-                                                                    <TextBlock Text="{Binding Summary}" Style="{StaticResource Muted}"
-                                                                               Margin="0,4,0,0" />
-
-                                                                    <!-- WrapPanel, not StackPanel: this row is the rule's cost
-                                                                         summary and must survive a narrow window. -->
-                                                                    <WrapPanel Orientation="Horizontal" Margin="0,10,0,0">
-                                                                        <TextBlock Text="{Binding TargetSummary}" Style="{StaticResource Mono}"
-                                                                                   VerticalAlignment="Center" Margin="0,0,10,0" />
-                                                                        <Border CornerRadius="{StaticResource RadiusXs}" Padding="6,2" Margin="0,0,10,0"
-                                                                                Background="{StaticResource Surface2}"
-                                                                                Visibility="{Binding HasBreaks, Converter={StaticResource BoolVis}}">
-                                                                            <TextBlock Text="{Binding BreakSummary}" FontSize="{StaticResource FontSm}"
-                                                                                       FontWeight="SemiBold"
-                                                                                       Foreground="{Binding WorstBreakage, Converter={StaticResource SevBrush}}" />
-                                                                        </Border>
-                                                                        <ToggleButton Style="{StaticResource LinkToggle}"
-                                                                                      IsChecked="{Binding IsExpanded, Mode=TwoWay}"
-                                                                                      AutomationProperties.Name="{Binding DetailToggleAutomationName}"
-                                                                                      VerticalAlignment="Center"
-                                                                                      Visibility="{Binding HasBreaks, Converter={StaticResource BoolVis}}" />
-                                                                    </WrapPanel>
-                                                                </StackPanel>
-
-                                                                <CheckBox Grid.Column="1" VerticalAlignment="Top"
-                                                                          IsChecked="{Binding IsEnabled, Mode=TwoWay}"
-                                                                          AutomationProperties.Name="{Binding ToggleAutomationName}" />
-                                                            </Grid>
-
-                                                            <!-- Expanded detail -->
-                                                            <StackPanel Margin="0,14,0,0"
-                                                                        Visibility="{Binding IsExpanded, Converter={StaticResource BoolVis}}">
-
-                                                                <Border Background="{StaticResource Surface2}"
-                                                                        CornerRadius="{StaticResource RadiusMd}" Padding="12" Margin="0,0,0,9"
-                                                                        Visibility="{Binding HasNote, Converter={StaticResource BoolVis}}">
-                                                                    <TextBlock Text="{Binding Note}" Style="{StaticResource Muted}" />
-                                                                </Border>
-
-                                                                <ItemsControl ItemsSource="{Binding Breaks}">
-                                                                    <ItemsControl.ItemTemplate>
-                                                                        <DataTemplate>
-                                                                            <Grid Margin="0,0,0,10">
-                                                                                <Grid.ColumnDefinitions>
-                                                                                    <ColumnDefinition Width="Auto" />
-                                                                                    <ColumnDefinition Width="*" />
-                                                                                </Grid.ColumnDefinitions>
-                                                                                <Border Grid.Column="0" Width="3" CornerRadius="{StaticResource RadiusXs}" Margin="0,2,11,2"
-                                                                                        Background="{Binding Severity, Converter={StaticResource SevBrush}}" />
-                                                                                <StackPanel Grid.Column="1">
-                                                                                    <Grid>
-                                                                                        <Grid.ColumnDefinitions>
-                                                                                            <ColumnDefinition Width="Auto" />
-                                                                                            <ColumnDefinition Width="*" />
-                                                                                        </Grid.ColumnDefinitions>
-                                                                                        <!-- Severity as a word, not just a hue. -->
-                                                                                        <TextBlock Grid.Column="0"
-                                                                                                   Text="{Binding Severity, Converter={StaticResource SevLabel}}"
-                                                                                                   FontSize="{StaticResource FontChip}" FontWeight="Bold"
-                                                                                                   VerticalAlignment="Top" Margin="0,2,9,0"
-                                                                                                   Foreground="{Binding Severity, Converter={StaticResource SevBrush}}" />
-                                                                                        <TextBlock Grid.Column="1" Text="{Binding What}"
-                                                                                                   FontWeight="SemiBold" FontSize="{StaticResource FontSm}"
-                                                                                                   TextWrapping="Wrap" />
-                                                                                    </Grid>
-                                                                                    <TextBlock Text="{Binding Detail}" Style="{StaticResource Muted}"
-                                                                                               Margin="0,3,0,0" />
-                                                                                </StackPanel>
-                                                                            </Grid>
-                                                                        </DataTemplate>
-                                                                    </ItemsControl.ItemTemplate>
-                                                                </ItemsControl>
-                                                            </StackPanel>
-                                                        </StackPanel>
-                                                    </Border>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
+                                        <ItemsControl ItemsSource="{Binding Rules}" ItemTemplate="{StaticResource RuleCardTemplate}" />
                                     </StackPanel>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
@@ -624,6 +696,8 @@
                         <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                             <Button Content="Scan this machine" Style="{StaticResource BaseButton}" Margin="0,0,12,0"
                                     Command="{Binding ScanAppsCommand}" />
+                            <Button Content="Verify local-only" Style="{StaticResource GhostButton}" Margin="0,0,12,0"
+                                    Command="{Binding VerifyContainmentCommand}" />
                             <TextBlock Style="{StaticResource Muted}" VerticalAlignment="Center"
                                        Text="Containment applies with the next Apply." />
                         </StackPanel>
@@ -631,6 +705,47 @@
 
                     <ScrollViewer Style="{StaticResource PageScroller}" AutomationProperties.Name="App containment">
                         <StackPanel>
+                            <Border Style="{StaticResource Card}" Padding="16" Margin="0,0,0,14"
+                                    Visibility="{Binding HasVerification, Converter={StaticResource BoolVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding VerificationVerdict}" FontWeight="SemiBold" TextWrapping="Wrap"
+                                               AutomationProperties.LiveSetting="Polite" />
+                                    <ItemsControl ItemsSource="{Binding VerificationRows}" Margin="0,10,0,0">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,0,0,8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="{Binding Verdict}" FontSize="{StaticResource FontChip}"
+                                                               FontWeight="Bold" Width="40" VerticalAlignment="Top" Margin="0,2,10,0"
+                                                               Foreground="{StaticResource SevNone}">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Passed}" Value="False">
+                                                                        <Setter Property="Foreground" Value="{StaticResource SevSevere}" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                    <StackPanel Grid.Column="1">
+                                                        <TextBlock FontSize="{StaticResource FontSm}" TextWrapping="Wrap">
+                                                            <Run Text="{Binding Target, Mode=OneWay}" FontWeight="SemiBold" />
+                                                            <Run Text=": " />
+                                                            <Run Text="{Binding Name, Mode=OneWay}" />
+                                                        </TextBlock>
+                                                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Muted}" Margin="0,2,0,0" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+
                             <Border Style="{StaticResource EmptyState}"
                                     Visibility="{Binding HasScanned, Converter={StaticResource NotBoolVis}}">
                                 <StackPanel>
@@ -665,9 +780,15 @@
                                                     <TextBlock Text="{Binding Publisher}" Style="{StaticResource Mono}" Margin="0,3,0,0"
                                                                Foreground="{StaticResource TextFaint}" />
                                                 </StackPanel>
-                                                <CheckBox Grid.Column="1" VerticalAlignment="Top"
-                                                          IsChecked="{Binding IsContained, Mode=TwoWay}"
-                                                          AutomationProperties.Name="{Binding ToggleAutomationName}" />
+                                                <StackPanel Grid.Column="1">
+                                                    <CheckBox Content="Contain" VerticalAlignment="Top"
+                                                              IsEnabled="{Binding CanChangeContainment}"
+                                                              IsChecked="{Binding IsContained, Mode=TwoWay}"
+                                                              AutomationProperties.Name="{Binding ToggleAutomationName}" />
+                                                    <CheckBox Content="Local-only" Margin="0,8,0,0"
+                                                              IsChecked="{Binding IsLocalOnly, Mode=TwoWay}"
+                                                              AutomationProperties.Name="{Binding LocalOnlyAutomationName}" />
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -677,8 +798,83 @@
                     </ScrollViewer>
                 </DockPanel>
 
-                <!-- ============ 4 · HISTORY ============ -->
+                <!-- ============ 4 · MARKERS ============ -->
                 <DockPanel Visibility="{Binding SelectedPage, Converter={StaticResource IdxVis}, ConverterParameter=4}">
+                    <StackPanel DockPanel.Dock="Top" Margin="32,28,32,16">
+                        <TextBlock Text="Markers" Style="{StaticResource H1}" />
+                        <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                            <Button Content="Scan this machine" Style="{StaticResource BaseButton}" Margin="0,0,12,0"
+                                    Command="{Binding ScanMarkersCommand}" />
+                            <TextBlock Style="{StaticResource Muted}" VerticalAlignment="Center" Text="{Binding MarkerSummary}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <ScrollViewer Style="{StaticResource PageScroller}" AutomationProperties.Name="Markers">
+                        <StackPanel>
+                            <TextBlock Text="Network markers" Style="{StaticResource H2}" Foreground="{StaticResource TextMuted}" />
+                            <ItemsControl ItemsSource="{Binding MarkerRules}" ItemTemplate="{StaticResource RuleCardTemplate}" />
+
+                            <TextBlock Text="On this machine" Style="{StaticResource H2}" Foreground="{StaticResource TextMuted}"
+                                       Margin="0,22,0,10" />
+                            <Border Style="{StaticResource EmptyState}"
+                                    Visibility="{Binding HasScannedMarkers, Converter={StaticResource NotBoolVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="Not scanned yet" Style="{StaticResource H2}" />
+                                    <TextBlock Style="{StaticResource Muted}" Text="The scan only reads names, sizes and dates. It changes nothing." />
+                                </StackPanel>
+                            </Border>
+                            <ItemsControl ItemsSource="{Binding MarkerGroups}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,0,0,16">
+                                            <TextBlock Text="{Binding Vendor}" Style="{StaticResource EyebrowFaint}" Margin="0,4,0,8" />
+                                            <ItemsControl ItemsSource="{Binding Markers}" ItemTemplate="{StaticResource MarkerCardTemplate}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+
+                <!-- ============ 5 · REPORT ============ -->
+                <DockPanel Visibility="{Binding SelectedPage, Converter={StaticResource IdxVis}, ConverterParameter=5}">
+                    <StackPanel DockPanel.Dock="Top" Margin="32,28,32,16">
+                        <TextBlock Text="Report" Style="{StaticResource H1}" />
+                        <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                            <Button Content="Generate report" Style="{StaticResource BaseButton}" Margin="0,0,10,0"
+                                    Command="{Binding GenerateReportCommand}" />
+                            <Button Content="Open last report" Style="{StaticResource GhostButton}" Margin="0,0,10,0"
+                                    Command="{Binding OpenReportCommand}"
+                                    Visibility="{Binding HasLastReport, Converter={StaticResource BoolVis}}" />
+                            <Button Content="Open reports folder" Style="{StaticResource GhostButton}"
+                                    Command="{Binding OpenReportsFolderCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <ScrollViewer Style="{StaticResource PageScroller}" AutomationProperties.Name="Report">
+                        <StackPanel>
+                            <Border Style="{StaticResource EmptyState}"
+                                    Visibility="{Binding HasLastReport, Converter={StaticResource NotBoolVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="No report yet" Style="{StaticResource H2}" />
+                                    <TextBlock Style="{StaticResource Muted}" Text="A report reads the machine back and lists what is armed, changed, confined and quarantined." />
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}" Padding="16"
+                                    Visibility="{Binding HasLastReport, Converter={StaticResource BoolVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="Last report" Style="{StaticResource H2}" />
+                                    <TextBlock Text="{Binding LastReportSummary}" Style="{StaticResource Muted}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding LastReportPath}" Style="{StaticResource Mono}" Margin="0,8,0,0" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+
+                <!-- ============ 6 · HISTORY ============ -->
+                <DockPanel Visibility="{Binding SelectedPage, Converter={StaticResource IdxVis}, ConverterParameter=6}">
                     <StackPanel DockPanel.Dock="Top" Margin="32,28,32,16">
                         <TextBlock Text="History &amp; restore" Style="{StaticResource H1}" />
                         <TextBlock Style="{StaticResource Muted}" Margin="0,6,0,0"
@@ -734,10 +930,10 @@
                     </ScrollViewer>
                 </DockPanel>
 
-                <!-- ============ 5 · ABOUT ============ -->
+                <!-- ============ 7 · ABOUT ============ -->
                 <ScrollViewer Style="{StaticResource PageScroller}" Padding="{StaticResource PagePadding}"
                               AutomationProperties.Name="About"
-                              Visibility="{Binding SelectedPage, Converter={StaticResource IdxVis}, ConverterParameter=5}">
+                              Visibility="{Binding SelectedPage, Converter={StaticResource IdxVis}, ConverterParameter=7}">
                     <StackPanel MaxWidth="800" HorizontalAlignment="Left">
                         <TextBlock Text="About Anti-Google" Style="{StaticResource H1}" />
                         <TextBlock Text="{Binding VersionLabel}" Style="{StaticResource Mono}" Margin="0,8,0,0" />

@@ -45,6 +45,17 @@ public enum BreakageSeverity
     Severe = 3
 }
 
+/// <summary>
+/// How a rule that supports it is carried out. <see cref="Block"/> removes the target's reach
+/// (disable it, sinkhole it). <see cref="LocalOnly"/> keeps it alive but lets it talk to this machine
+/// only: names resolve to loopback and a firewall rule stops everything else.
+/// </summary>
+public enum RuleMode
+{
+    Block = 0,
+    LocalOnly = 1
+}
+
 /// <summary>Which subsystem actually carries out a rule. Each has its own revert path.</summary>
 public enum EngineKind
 {
@@ -53,7 +64,13 @@ public enum EngineKind
     Service = 2,
     ScheduledTask = 3,
     Registry = 4,
-    AppContainment = 5
+    AppContainment = 5,
+
+    /// <summary>Keep a service, task or app running but confine it to this machine (loopback only).</summary>
+    LocalOnly = 6,
+
+    /// <summary>Move a marker (identifier file, leftover, crash dump) into the quarantine vault.</summary>
+    Quarantine = 7
 }
 
 /// <summary>Grouping used by the UI only.</summary>
@@ -70,7 +87,10 @@ public enum RuleCategory
     Sync,
     Search,
     WindowsIntegration,
-    Containment
+    Containment,
+
+    /// <summary>Other Google-owned services: Mandiant, VirusTotal, Google SecOps.</summary>
+    GoogleOwned
 }
 
 /// <summary>Result of attempting a single planned change.</summary>

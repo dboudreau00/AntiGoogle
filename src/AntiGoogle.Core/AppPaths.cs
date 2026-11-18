@@ -37,6 +37,23 @@ public static class AppPaths
     /// <summary>Firewall rule group. Every rule we create carries it, so cleanup is one sweep.</summary>
     public const string FirewallGroup = "Anti-Google";
 
+    /// <summary>Where a name goes when it is sinkholed: nowhere.</summary>
+    public const string SinkholeV4 = "0.0.0.0";
+    public const string SinkholeV6 = "::";
+
+    /// <summary>Where a name goes in local-only mode: back to this machine.</summary>
+    public const string LoopbackV4 = "127.0.0.1";
+    public const string LoopbackV6 = "::1";
+
+    /// <summary>Quarantine vault: moved markers and their manifests, one folder per item.</summary>
+    public static string Quarantine => Path.Combine(Root, "quarantine");
+
+    /// <summary>Append-only history of what Anti-Google did, one JSON object per line.</summary>
+    public static string AuditFile => Path.Combine(Root, "audit.jsonl");
+
+    /// <summary>Generated reports (HTML and JSON).</summary>
+    public static string Reports => Path.Combine(Root, "reports");
+
     public static void EnsureCreated()
     {
         Directory.CreateDirectory(Root);

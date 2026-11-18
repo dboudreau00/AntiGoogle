@@ -15,6 +15,7 @@
 using System.Windows;
 using System.Windows.Threading;
 using AntiGoogle.Core;
+using AntiGoogle.Core.Reporting;
 
 namespace AntiGoogle.App;
 
@@ -30,7 +31,34 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
             Log.Error($"Fatal: {args.ExceptionObject}");
 
+        // Headless: AntiGoogle.exe --report [folder] writes the report and exits without opening a window.
+        var reportAt = Array.FindIndex(e.Args, a => string.Equals(a, "--report", StringComparison.OrdinalIgnoreCase));
+        if (reportAt >= 0)
+        {
+            Shutdown(WriteReport(e.Args.Length > reportAt + 1 ? e.Args[reportAt + 1] : null));
+            return;
+        }
+
         base.OnStartup(e);
+    }
+
+    private static int WriteReport(string? directory)
+    {
+        try
+        {
+            var settings = AppSettings.LoadOrDefault();
+            var service = new ProtectionService();
+            var report = Task.Run(() => new ReportBuilder(service, ViewModels.MainViewModel.VersionNumber).BuildAsync(settings))
+                             .GetAwaiter().GetResult();
+            var saved = ReportWriter.Save(report, directory);
+            Log.Info($"Report written to {saved.HtmlPath}");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("The report could not be written.", ex);
+            return 1;
+        }
     }
 
     private static void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

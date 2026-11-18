@@ -32,7 +32,10 @@ public enum ReverseKind
     RestoreScheduledTask,
 
     /// <summary>Put a registry value back, or delete it if it did not exist before.</summary>
-    RestoreRegistryValue
+    RestoreRegistryValue,
+
+    /// <summary>Move a quarantined item back to where it came from.</summary>
+    RestoreQuarantine
 }
 
 /// <summary>
@@ -59,10 +62,25 @@ public sealed class JournalEntry
     /// <summary>Win32 service start type: 2=Automatic, 3=Manual, 4=Disabled.</summary>
     public int? PreviousStartType { get; set; }
     public bool? PreviousServiceRunning { get; set; }
+    /// <summary>
+    /// "Automatic (Delayed Start)" is Start=2 plus this separate flag. Without recording it a restore
+    /// turns a delayed service into a plain automatic one.
+    /// </summary>
+    public bool? PreviousDelayedAutostart { get; set; }
 
     // --- RestoreScheduledTask ---
     public string? TaskPath { get; set; }
     public bool? TaskWasEnabled { get; set; }
+
+    /// <summary>
+    /// The program a firewall rule is scoped to (containment and local-only), or the original path of a
+    /// quarantined item. Lets a later plan tell which armed target an entry belongs to.
+    /// </summary>
+    public string? Target { get; set; }
+
+    // --- RestoreQuarantine ---
+    /// <summary>Folder name of the item in the quarantine vault. The manifest inside it carries the rest.</summary>
+    public string? QuarantineId { get; set; }
 
     // --- RestoreRegistryValue ---
     public RegistryHive2? RegistryHive { get; set; }
@@ -73,6 +91,14 @@ public sealed class JournalEntry
     public string? PreviousValueKind { get; set; }
     /// <summary>True when we created the key itself; revert removes it if we left it empty.</summary>
     public bool RegistryKeyCreated { get; set; }
+
+    /// <summary>
+    /// The shallowest key this change had to create (for instance SOFTWARE\Policies\Google when none of
+    /// Policies\Google\Chrome existed). Revert removes the empty keys from the leaf up to and including
+    /// it, so the machine does not keep an empty parent that was never there. Null in journals written
+    /// before this field existed, which then only ever remove the leaf.
+    /// </summary>
+    public string? RegistryCreatedRoot { get; set; }
 
     public override string ToString() => $"{At:yyyy-MM-dd HH:mm} {Description}";
 }

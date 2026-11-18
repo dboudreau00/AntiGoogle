@@ -25,6 +25,16 @@ are warning a friend, not filing a ticket.
 - A `Severe` breakage with a `Detail` under 40 characters fails a test. Stubs are not acceptable
   on the loudest warnings.
 
+## Local-only and markers
+
+- A rule that offers local-only mode must declare `LocalOnlyBreaks`. The cost of keeping something
+  running but cut off is not the cost of blocking it, and a test enforces that they are stated apart.
+- A marker states where its location comes from and how sure the catalog is. A `Low` confidence marker
+  is report-only. A security agent is never quarantinable, and no marker may point at a credential
+  store, a browser profile file or a token. Tests pin all three.
+- Marker locations use environment tokens and are expanded by one function that refuses anything that
+  climbs out of its root. Do not build paths from catalog strings any other way.
+
 ## Non-negotiables
 
 These are enforced by tests, by review, or by both. `CLAUDE.md` has the full list and the reasoning.
@@ -67,7 +77,9 @@ add a test, both runners pick it up automatically — but `AntiGoogle.Core`'s `I
 names **both** assemblies, so update both if you rename either.
 
 **Tests must never touch the real machine.** `HostsFileEngine` and `FirewallEngine` take their
-target path and rule group as constructor parameters for exactly this reason. In particular:
+target path and rule group as constructor parameters for exactly this reason, `QuarantineEngine` takes
+its vault and a marker environment, and a `ProtectionService` built from options writes no audit log
+unless one is passed. In particular:
 `RevertAllAsync` sweeps the entire firewall group, so a suite run from an elevated shell against the
 default group would delete the user's real rules. Always pass a per-test group.
 
