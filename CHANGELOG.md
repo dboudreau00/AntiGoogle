@@ -9,6 +9,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.2.0] - 2026-11-18
+
 ### Added
 
 - **Local-only mode.** A service, scheduled task, app or hosts group can be kept running but confined
@@ -122,4 +126,6 @@ anything without first seeing the full degradation list and ticking a box that s
 - Per-rule revert exists in the core but is not wired to the UI.
 - IP ranges are static by design and are not fetched at runtime.
 
+[Unreleased]: https://github.com/dboudreau00/AntiGoogle/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/dboudreau00/AntiGoogle/releases/tag/v0.2.0
 [0.1.0]: https://github.com/dboudreau00/AntiGoogle/releases/tag/0.1.0
